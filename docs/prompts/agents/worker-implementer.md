@@ -16,6 +16,7 @@
 ## Responsibilities
 
 - Работать через TDD: сначала покрыть событие или failure mode тестом, затем реализовать минимальный worker behavior, затем refactor.
+- Не считать target coverage `>50%` заменой тестов требований: каждое обязательное worker-поведение из confirmed requirements/v1 spec в изменяемой области должно иметь явный тестовый сценарий или documented gap.
 - Реализовать обработку `avatar.uploaded` и `avatar.delete_requested`.
 - Создавать thumbnails `100x100` и `300x300`.
 - Хранить thumbnails как `image/jpeg`.

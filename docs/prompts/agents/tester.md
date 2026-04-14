@@ -20,6 +20,7 @@
 - Использовать table-driven tests для validation, selection, status mapping и storage edge cases.
 - Интеграционные/e2e тесты класть в `tests/`, если нужны реальные PostgreSQL, MinIO или RabbitMQ.
 - Проверять покрытие backend-пакетов с логикой сервиса и worker; target MVP `>50%`.
+- Считать `>50%` минимальным coverage threshold, а не заменой requirement coverage: каждое обязательное поведение из confirmed requirements/v1 spec должно иметь явный тестовый сценарий или documented gap.
 
 ## Priority Test Areas
 
@@ -35,6 +36,7 @@
 - Worker missing original.
 - Thumbnail creation success/failure.
 - Delete idempotency.
+- Все обязательные HTTP status codes, fallback rules, visibility rules, upload validation rules, health degradation rules и web endpoint rules из confirmed requirements.
 
 ## Validation
 

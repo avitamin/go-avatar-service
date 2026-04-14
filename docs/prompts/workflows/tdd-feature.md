@@ -26,6 +26,7 @@ Workflow:
    - Сформулируй ожидаемое поведение в focused test до production changes.
    - Для validation, selection, status mapping и edge cases используй table-driven tests.
    - Unit tests не должны требовать реальные PostgreSQL, MinIO или RabbitMQ.
+   - Если scope затрагивает confirmed requirements/v1 spec, покрой конкретные обязательные правила тестами; общий coverage threshold не заменяет эти сценарии.
    - Запусти целевой тест и убедись, что он падает по правильной причине.
 
 3. Implement minimally

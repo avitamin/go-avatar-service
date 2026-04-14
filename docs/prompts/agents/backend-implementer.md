@@ -17,6 +17,7 @@
 
 - Следовать confirmed requirements и v1 spec.
 - Работать через TDD: сначала добавить или обновить failing test для требуемого поведения, затем реализовать минимальный production code, затем refactor при зеленых тестах.
+- Не считать target coverage `>50%` заменой тестов требований: каждое обязательное поведение из confirmed requirements/v1 spec в изменяемой области должно иметь явный тестовый сценарий или documented gap.
 - Держать HTTP handlers тонкими; бизнес-правила размещать в service layer.
 - Маппить domain errors в единый JSON error model в HTTP/render layer.
 - Делать read endpoints публичными; `X-User-ID` требовать только для mutate endpoints.

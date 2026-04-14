@@ -32,5 +32,6 @@ Acceptance criteria:
 - Соблюдай TDD: новые production changes начинаются с теста, который сначала падает по правильной причине.
 - Unit tests не должны требовать реальные PostgreSQL, MinIO или RabbitMQ.
 - Для validation и edge cases предпочитай table-driven tests.
+- Проверяй конкретные обязательные требования, а не только процент покрытия: target `>50%` является минимальным threshold, но не заменяет requirement coverage.
 - В финале укажи, какие проверки запускались.
 ```

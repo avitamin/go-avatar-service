@@ -26,6 +26,7 @@
 - Отсутствие upload validation по magic bytes.
 - Нарушения worker idempotency и async delete semantics.
 - Недостаточные тесты для измененной бизнес-логики.
+- Подмену requirement coverage общей метрикой: `>50%` является минимальным порогом, но не оправдывает отсутствие тестов для конкретных обязательных правил.
 
 ## Output Format
 

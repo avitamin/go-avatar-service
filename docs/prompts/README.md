@@ -50,6 +50,7 @@
 ## Workflow Prompts
 
 - `workflows/tdd-feature.md` - общий TDD workflow для реализации фичи: explore, test first, implement, refactor, verify, report.
+- `workflows/tdd-mvp-implementation-plan.md` - TDD-план поэтапной реализации MVP по confirmed requirements и v1 spec.
 
 ## Task Templates
 
