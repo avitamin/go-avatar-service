@@ -22,18 +22,20 @@
 
 - `cmd/server/main.go` - минимальный HTTP server placeholder на `:8080`.
 - `cmd/worker/main.go` - минимальный worker placeholder с бесконечным loop.
+- `cmd/avatar-contract-tests/main.go` - black-box бинарник контрактных smoke-тестов HTTP API.
 - `web/static/index.html` - шаблонный upload UI.
+- `tests/contract/` - runner автотестов будущих endpoints и его self-tests.
 - `go.mod` - модуль `go-avatar-service`, Go `1.25.1`.
+- `Makefile` - базовые цели для сборки, тестов и запуска contract runner'а.
+- `.idea/runConfigurations/` - shared JetBrains run configurations для server, worker, contract runner и Makefile-целей.
 - `docs/` - требования, спека и reusable prompts для AI-агентов.
 
 Пока отсутствуют:
 
 - `internal/` с основной backend-логикой.
 - `migrations/`.
-- `tests/`.
 - `Dockerfile`.
 - `docker-compose.yml`.
-- `Makefile`.
 
 Docker Compose обязателен для MVP по подтвержденным требованиям, но файл compose пока не добавлен. Не используйте `docker-compose up --build` как рабочий сценарий до появления конфигурации в репозитории.
 
@@ -99,13 +101,18 @@ Upload из web должен идти напрямую в `POST /api/v1/avatars`
 ├── cmd/
 │   ├── server/
 │   │   └── main.go
-│   └── worker/
+│   ├── worker/
+│   │   └── main.go
+│   └── avatar-contract-tests/
 │       └── main.go
 ├── docs/
+├── tests/
+│   └── contract/
 ├── web/
 │   └── static/
 │       └── index.html
 ├── go.mod
+├── Makefile
 ├── README.md
 └── QWEN.md
 ```
@@ -144,10 +151,66 @@ go run ./cmd/server
 go run ./cmd/worker
 go build -o ./bin/server ./cmd/server
 go build -o ./bin/worker ./cmd/worker
+go build -o ./bin/avatar-contract-tests ./cmd/avatar-contract-tests
 go test ./...
 ```
 
-`go test ./...` сейчас проверяет только существующий skeleton, пока тесты не добавлены.
+То же через `make`:
+
+```bash
+make test
+make build-server
+make build-worker
+make build-contract-tests
+BASE_URL=http://localhost:8080 make contract-tests
+```
+
+`go test ./...` сейчас проверяет skeleton и self-tests contract runner'а. Бинарники из `bin/` игнорируются git.
+
+В JetBrains IDE сохранены shared run configurations:
+
+- `Server` - запускает `cmd/server`.
+- `Worker` - запускает `cmd/worker`.
+- `Avatar Contract Tests` - запускает contract runner с `BASE_URL=http://localhost:8080`.
+- `Make Test` - выполняет `make test`.
+- `Make Build Contract Tests` - выполняет `make build-contract-tests`.
+- `Make Contract Tests` - выполняет `make contract-tests` с `BASE_URL=http://localhost:8080`.
+
+## Контрактные автотесты
+
+В репозитории есть отдельный black-box runner `avatar-contract-tests`. Он нужен, чтобы проверять будущую реализацию HTTP API против confirmed requirements и v1 spec через публичные endpoints, без импорта `internal/` кода сервиса.
+
+Сборка:
+
+```bash
+go build -o ./bin/avatar-contract-tests ./cmd/avatar-contract-tests
+```
+
+Запуск против уже поднятого сервиса:
+
+```bash
+BASE_URL=http://localhost:8080 ./bin/avatar-contract-tests
+```
+
+Или через Makefile:
+
+```bash
+BASE_URL=http://localhost:8080 make contract-tests
+```
+
+Эквивалентно через flags:
+
+```bash
+./bin/avatar-contract-tests -base-url http://localhost:8080 -timeout 30s -user-id contract-user
+```
+
+Runner не управляет Docker Compose, миграциями, PostgreSQL, MinIO, RabbitMQ и worker-процессами. Окружение должно быть поднято заранее. Exit codes:
+
+- `0` - все сценарии прошли.
+- `1` - есть проваленные контрактные сценарии.
+- `2` - неверная конфигурация runner'а, например не задан `BASE_URL`.
+
+Текущий набор сценариев - contract smoke: `/health`, web endpoints, upload через multipart поле `file`, единый JSON error shape, read endpoints с `size`, запрет `format`, metadata/list, delete ownership и скрытие soft-deleted записи.
 
 ## Подход к разработке
 

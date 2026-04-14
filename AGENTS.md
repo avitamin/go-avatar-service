@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Это Go-модуль `go-avatar-service`. Точки входа сейчас находятся в `cmd/`: `cmd/server/main.go` запускает HTTP-сервер на `:8080`, а `cmd/worker/main.go` запускает фоновый worker. Веб-интерфейс сейчас представлен файлом `web/static/index.html`. По мере развития проекта держите приватную логику в `internal/` по структуре из актуальной спеки v1: `http/`, `service/`, `repository/`, `storage/`, `broker/`, `domain/`, `config/`, `worker/`. Публичный код кладите в `pkg/` только если он действительно рассчитан на переиспользование вне сервиса.
+Это Go-модуль `go-avatar-service`. Точки входа сейчас находятся в `cmd/`: `cmd/server/main.go` запускает HTTP-сервер на `:8080`, `cmd/worker/main.go` запускает фоновый worker, а `cmd/avatar-contract-tests/main.go` собирает black-box runner контрактных smoke-тестов HTTP API. Веб-интерфейс сейчас представлен файлом `web/static/index.html`. По мере развития проекта держите приватную логику в `internal/` по структуре из актуальной спеки v1: `http/`, `service/`, `repository/`, `storage/`, `broker/`, `domain/`, `config/`, `worker/`. Публичный код кладите в `pkg/` только если он действительно рассчитан на переиспользование вне сервиса.
 
 ## AI Agent Prompts
 
@@ -17,7 +17,13 @@
 - `go run ./cmd/worker`: запускает worker-процесс.
 - `go build -o ./bin/server ./cmd/server`: собирает бинарник сервера.
 - `go build -o ./bin/worker ./cmd/worker`: собирает бинарник worker.
-- `go test ./...`: запускает все Go-тесты после их добавления.
+- `go build -o ./bin/avatar-contract-tests ./cmd/avatar-contract-tests`: собирает black-box бинарник контрактных автотестов.
+- `BASE_URL=http://localhost:8080 ./bin/avatar-contract-tests`: запускает contract smoke tests против уже поднятого сервиса.
+- `make test`, `make build-server`, `make build-worker`, `make build-contract-tests`: короткие Makefile-цели для базовых команд.
+- `BASE_URL=http://localhost:8080 make contract-tests`: собирает и запускает contract smoke runner.
+- `go test ./...`: запускает все Go-тесты, включая self-tests contract runner'а.
+
+В `.idea/runConfigurations/` сохранены shared JetBrains конфигурации: `Server`, `Worker`, `Avatar Contract Tests`, `Make Test`, `Make Build Contract Tests`, `Make Contract Tests`.
 
 Docker Compose упомянут в README как будущий сценарий, но compose-файла сейчас нет. Не опирайтесь на него, пока конфигурация не появится в репозитории.
 
@@ -27,7 +33,7 @@ Docker Compose упомянут в README как будущий сценарий
 
 ## Testing Guidelines
 
-Разработка ведется через TDD: сначала формулируйте ожидаемое поведение тестом, убедитесь, что он падает по правильной причине, затем реализуйте минимальный код и выполните refactor при зеленых тестах. Используйте стандартный пакет `testing`, пока проект явно не выберет другой фреймворк. Unit-тесты размещайте рядом с кодом, например `internal/service/avatar_test.go`. Для валидации, HTTP handlers и storage edge cases предпочитайте table-driven tests. Интеграционные и e2e-тесты кладите в `tests/`, если им нужны реальные внешние сервисы.
+Разработка ведется через TDD: сначала формулируйте ожидаемое поведение тестом, убедитесь, что он падает по правильной причине, затем реализуйте минимальный код и выполните refactor при зеленых тестах. Используйте стандартный пакет `testing`, пока проект явно не выберет другой фреймворк. Unit-тесты размещайте рядом с кодом, например `internal/service/avatar_test.go`. Для валидации, HTTP handlers и storage edge cases предпочитайте table-driven tests. Интеграционные и e2e-тесты кладите в `tests/`, если им нужны реальные внешние сервисы. Contract smoke runner в `tests/contract` не импортирует `internal/` код и проверяет API только через HTTP.
 
 ## Commit & Pull Request Guidelines
 

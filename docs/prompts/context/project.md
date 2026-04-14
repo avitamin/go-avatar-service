@@ -14,8 +14,12 @@
 
 - `cmd/server/main.go` - минимальный `net/http` placeholder.
 - `cmd/worker/main.go` - минимальный worker placeholder с бесконечным loop.
+- `cmd/avatar-contract-tests/main.go` - black-box CLI runner контрактных smoke-тестов HTTP API.
 - `web/static/index.html` - готовый upload UI.
-- `internal/`, `migrations/`, `tests/`, `Dockerfile`, `docker-compose.yml`, `Makefile` пока отсутствуют.
+- `tests/contract/` - автотестовый runner будущих endpoints и self-tests через `httptest`.
+- `Makefile` - базовые цели для сборки, `go test` и contract smoke runner.
+- `.idea/runConfigurations/` - shared JetBrains run configurations для entrypoints и Makefile-целей.
+- `internal/`, `migrations/`, `Dockerfile`, `docker-compose.yml` пока отсутствуют.
 - `go.mod` объявляет модуль `go-avatar-service`.
 
 ## Requirements Priority
@@ -31,6 +35,7 @@
 ## Important Known Differences
 
 - Frontend сейчас отправляет multipart поле `image`, а API contract в ТЗ/спеке ожидает `file`.
+- Contract runner проверяет именно multipart поле `file`; это намеренно фиксирует целевой API contract, а не текущее поведение шаблонного frontend.
 - Текущая структура имеет `cmd/server` и `cmd/worker`, а спека предпочитает single binary `cmd/avatars-service` с subcommands `server`, `worker`, `migrate`.
 - README предлагает `docker-compose up --build`, но compose-файла пока нет.
 - README/QWEN описывают `internal/handlers` и `internal/services`, а v1 spec предлагает `internal/http`, `internal/service`, `internal/repository/postgres`, `internal/storage/minio`, `internal/broker/rabbitmq`.
@@ -44,5 +49,7 @@
 - Coverage target `>50%` является минимальной метрикой для backend-пакетов с логикой сервиса и worker, но не заменяет тесты конкретных обязательных требований.
 - Go код форматировать через `gofmt`.
 - Для backend-логики использовать standard `testing`; для edge cases предпочитать table-driven tests.
+- Contract runner запускать против уже поднятого сервиса: `BASE_URL=http://localhost:8080 ./bin/avatar-contract-tests`.
+- Предпочтительная короткая команда для contract runner: `BASE_URL=http://localhost:8080 make contract-tests`.
 - Не добавлять `pkg/`, если нет реального reusable public API.
 - Не коммитить `.env`, загруженные аватары, бинарники из `bin/` и секреты.

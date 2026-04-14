@@ -1,0 +1,14 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Avatar Contract Tests" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="avatar-service" />
+    <working_directory value="$PROJECT_DIR$" />
+    <envs>
+      <env name="BASE_URL" value="http://localhost:8080" />
+    </envs>
+    <kind value="PACKAGE" />
+    <package value="go-avatar-service/cmd/avatar-contract-tests" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/cmd/avatar-contract-tests/main.go" />
+    <method v="2" />
+  </configuration>
+</component>

@@ -12,7 +12,9 @@
 *.out
 
 # IDE-specific files
-.idea/
+.idea/*
+!.idea/runConfigurations/
+!.idea/runConfigurations/*.xml
 .vscode/
 *.suo
 *.ntvs*
@@ -31,3 +33,4 @@
 
 # Compiled binary
 /app
+/bin/
