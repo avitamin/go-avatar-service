@@ -26,5 +26,8 @@
 # Environment variables
 .env
 
+# Local Codex configuration
+/.codex/config.toml
+
 # Compiled binary
 /app
