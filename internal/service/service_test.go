@@ -1,0 +1,117 @@
+package service
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"testing"
+
+	"go-avatar-service/internal/domain"
+)
+
+func TestUploadStoresOriginalAndPublishFailureMarksFailed(t *testing.T) {
+	ctx := context.Background()
+	svc := NewAvatarService(NewMemoryRepository(), NewMemoryStorage(), &stubBroker{err: errors.New("down")})
+
+	got, err := svc.Upload(ctx, UploadInput{
+		UserID:      "user-1",
+		FileName:    "avatar.jpg",
+		Content:     []byte{0xff, 0xd8, 0xff, 0xdb},
+		ContentType: "image/jpeg",
+	})
+	if err != nil {
+		t.Fatalf("Upload() error = %v", err)
+	}
+	if got.Status != domain.StatusFailed {
+		t.Fatalf("status = %q, want failed", got.Status)
+	}
+	if got.URL != domain.AvatarURL(got.ID) {
+		t.Fatalf("url = %q, want relative API URL", got.URL)
+	}
+	avatar, err := svc.repo.GetActiveByID(ctx, got.ID)
+	if err != nil {
+		t.Fatalf("repo avatar: %v", err)
+	}
+	if !avatar.OriginalAvailable {
+		t.Fatal("original must remain available after publish failure")
+	}
+}
+
+func TestListIncludesFailedAndSortsCreatedDesc(t *testing.T) {
+	ctx := context.Background()
+	repo := NewMemoryRepository()
+	svc := NewAvatarService(repo, NewMemoryStorage(), &stubBroker{})
+	first, _ := svc.Upload(ctx, UploadInput{UserID: "user-1", FileName: "a.jpg", Content: []byte{0xff, 0xd8, 0xff}, ContentType: "image/jpeg"})
+	second, _ := svc.Upload(ctx, UploadInput{UserID: "user-1", FileName: "b.jpg", Content: []byte{0xff, 0xd8, 0xff}, ContentType: "image/jpeg"})
+	_ = repo.MarkPublishFailed(ctx, first.ID)
+
+	got, err := svc.ListByUser(ctx, "user-1")
+	if err != nil {
+		t.Fatalf("ListByUser() error = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+	if got[0].ID != second.ID {
+		t.Fatalf("first id = %q, want latest %q", got[0].ID, second.ID)
+	}
+	if got[1].Status != domain.StatusFailed {
+		t.Fatalf("failed record hidden or status wrong: %+v", got[1])
+	}
+}
+
+func TestReadExactVariantRules(t *testing.T) {
+	ctx := context.Background()
+	repo := NewMemoryRepository()
+	storage := NewMemoryStorage()
+	svc := NewAvatarService(repo, storage, &stubBroker{})
+	created, _ := svc.Upload(ctx, UploadInput{UserID: "user-1", FileName: "a.jpg", Content: []byte{0xff, 0xd8, 0xff}, ContentType: "image/jpeg"})
+
+	if _, _, err := svc.ReadAvatar(ctx, created.ID, domain.Size100); !errors.Is(err, ErrVariantNotReady) {
+		t.Fatalf("ReadAvatar thumb err = %v, want ErrVariantNotReady", err)
+	}
+	storage.Delete(ctx, "avatars/"+created.ID+"/original.jpg")
+	if _, _, err := svc.ReadAvatar(ctx, created.ID, domain.SizeOriginal); !errors.Is(err, ErrObjectNotFound) {
+		t.Fatalf("ReadAvatar missing original err = %v, want ErrObjectNotFound", err)
+	}
+	meta, err := svc.Metadata(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("Metadata() error = %v", err)
+	}
+	if meta.Status != domain.StatusFailed {
+		t.Fatalf("metadata status = %q, want failed on drift", meta.Status)
+	}
+}
+
+func TestUserFallbackAndDeleteRules(t *testing.T) {
+	ctx := context.Background()
+	svc := NewAvatarService(NewMemoryRepository(), NewMemoryStorage(), &stubBroker{})
+	old, _ := svc.Upload(ctx, UploadInput{UserID: "user-1", FileName: "old.jpg", Content: []byte{0xff, 0xd8, 0xff}, ContentType: "image/jpeg"})
+	newer, _ := svc.Upload(ctx, UploadInput{UserID: "user-1", FileName: "new.jpg", Content: []byte{0xff, 0xd8, 0xff}, ContentType: "image/jpeg"})
+	svc.storage.Delete(ctx, "avatars/"+newer.ID+"/original.jpg")
+
+	data, meta, err := svc.ReadUserAvatar(ctx, "user-1", domain.SizeOriginal)
+	if err != nil {
+		t.Fatalf("ReadUserAvatar() error = %v", err)
+	}
+	if meta.ID != old.ID || !bytes.HasPrefix(data, []byte{0xff, 0xd8, 0xff}) {
+		t.Fatalf("fallback returned meta=%+v data=%v, want old original", meta, data)
+	}
+	if err := svc.DeleteByID(ctx, newer.ID, "intruder"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("DeleteByID wrong owner err = %v, want ErrForbidden", err)
+	}
+	if err := svc.DeleteCurrentUserAvatar(ctx, "user-1", "intruder"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("DeleteCurrent wrong owner err = %v, want ErrForbidden", err)
+	}
+	if err := svc.DeleteCurrentUserAvatar(ctx, "user-1", "user-1"); err != nil {
+		t.Fatalf("DeleteCurrentUserAvatar() error = %v", err)
+	}
+}
+
+type stubBroker struct {
+	err error
+}
+
+func (b *stubBroker) Publish(context.Context, string, []byte, string) error {
+	return b.err
+}

@@ -2,7 +2,7 @@
 
 ## Назначение
 
-`go-avatar-service` - Go-сервис для управления аватарками пользователей. Репозиторий сейчас является skeleton для дальнейшей реализации backend, worker, storage-интеграций и web endpoints.
+`go-avatar-service` - Go-сервис для управления аватарками пользователей. Текущая кодовая база содержит MVP contract implementation на in-memory core: HTTP API на Chi, web upload/gallery, worker handlers, CLI bootstrap, SQL migration files и Docker Compose.
 
 ## Приоритет документации
 
@@ -24,30 +24,31 @@
 - `docs/prompts/README.md`
 - `docs/prompts/context/project.md`
 
-Файлы в `docs/prompts/` являются reusable prompts. Используйте конкретный prompt как активную инструкцию только при явном запросе.
-
 ## Current Repository State
 
 Сейчас есть:
 
-- `cmd/server/main.go` - минимальный HTTP server placeholder на `:8080`.
-- `cmd/worker/main.go` - минимальный worker placeholder.
-- `web/static/index.html` - шаблонный upload UI.
-- `go.mod` - модуль `go-avatar-service`, Go `1.25.1`.
-- `docs/requirements/` - исходное ТЗ и подтвержденные требования.
-- `docs/specs/avatar-service-v1.md` - актуальная спека разработки v1.
-- `docs/prompts/` - reusable prompts для AI-агентов.
+- `cmd/avatars-service/main.go` - основной single binary CLI.
+- `cmd/server/main.go`, `cmd/worker/main.go` - thin compatibility wrappers.
+- `cmd/avatar-contract-tests/main.go` - black-box contract smoke runner.
+- `internal/app` - CLI/bootstrap.
+- `internal/domain` - statuses, size и user ID validation.
+- `internal/http` - Chi router, handlers, JSON errors, access logs, web pages.
+- `internal/service` - application service, in-memory repository/storage, selection/fallback, soft delete.
+- `internal/imageproc` - image sniff/decode/thumbnail helpers.
+- `internal/worker` - upload/delete handlers, retry, idempotency.
+- `migrations/` - initial SQL schema files.
+- `Dockerfile` и `docker-compose.yml`.
+- `web/static/index.html` - upload UI с multipart field `file`.
+- `tests/contract/` - contract runner и self-tests.
+- `Makefile` - build/test/run/migrate targets.
 
-Пока отсутствуют:
+Current runtime gaps:
 
-- `internal/`
-- `migrations/`
-- `tests/`
-- `Dockerfile`
-- `docker-compose.yml`
-- `Makefile`
-
-Docker Compose и Dockerfile обязательны для MVP, но еще не реализованы в репозитории.
+- PostgreSQL/MinIO/RabbitMQ adapters еще не подключены; server/worker используют in-memory implementation.
+- RabbitMQ consumer loop еще не подключен к worker bootstrap.
+- `avatars-service migrate` фиксирует CLI contract, но пока не применяет SQL к PostgreSQL.
+- `/health` возвращает компонентную модель, но runtime connectivity checks пока не реальные.
 
 ## Target Architecture
 
@@ -59,21 +60,16 @@ Confirmed technology choices:
 - RabbitMQ + worker for async image processing.
 - Standard `testing` package unless the project explicitly adopts another framework.
 
-Target internal package layout from v1 spec:
+Target package additions for future adapters:
 
-- `internal/http` - router, middleware, handlers, web pages, JSON rendering.
-- `internal/service` - avatar service, health service, selection logic.
-- `internal/repository` - PostgreSQL repositories and repository interfaces.
-- `internal/storage` - MinIO adapter and storage interfaces.
-- `internal/broker` - RabbitMQ publisher/consumer and broker interfaces.
-- `internal/domain` - entities, statuses, domain errors, events.
-- `internal/config` - environment parsing and validation.
-- `internal/worker` - event handlers, retry logic, worker runner.
-- `internal/imageproc` - image sniffing, decode, resize and metadata.
+- `internal/repository/postgres`
+- `internal/storage/minio`
+- `internal/broker/rabbitmq`
+- `internal/config`
 
 `pkg/` is not needed for MVP unless there is real public reusable API.
 
-The v1 spec prefers one binary with subcommands:
+## CLI Contract
 
 ```bash
 avatars-service server
@@ -83,11 +79,9 @@ avatars-service migrate down
 avatars-service migrate status
 ```
 
-The current skeleton still has separate `cmd/server` and `cmd/worker` entrypoints.
+Migrations are an explicit operational step and must not be auto-run by `server` or `worker`.
 
 ## API Contract
-
-Required API endpoints:
 
 | Method | Path | Notes |
 | --- | --- | --- |
@@ -98,7 +92,7 @@ Required API endpoints:
 | `DELETE` | `/api/v1/users/{user_id}/avatar` | Delete latest active avatar with available original. |
 | `GET` | `/api/v1/avatars/{avatar_id}/metadata` | Metadata for active avatar. |
 | `GET` | `/api/v1/users/{user_id}/avatars` | List active avatars by user, sorted `created_at DESC`. |
-| `GET` | `/health` | Checks postgres, minio and rabbitmq. |
+| `GET` | `/health` | Component health response. |
 
 Supported `size` values:
 
@@ -123,7 +117,7 @@ Required web endpoints:
 - `GET /web/upload`
 - `GET /web/gallery/{user_id}`
 
-There is no required `POST /web/upload`. The web upload page must send directly to `POST /api/v1/avatars`. `user_id` is entered by the user in the form.
+There is no required `POST /web/upload`. The web upload page sends directly to `POST /api/v1/avatars` with multipart field `file`.
 
 Gallery rules:
 
@@ -136,18 +130,43 @@ Gallery rules:
 
 ## Development Commands
 
-Commands available in the current skeleton:
-
 ```bash
 go mod tidy
-go run ./cmd/server
-go run ./cmd/worker
-go build -o ./bin/server ./cmd/server
-go build -o ./bin/worker ./cmd/worker
 go test ./...
+go test ./internal/... -cover
+go build ./cmd/avatars-service ./cmd/server ./cmd/worker ./cmd/avatar-contract-tests
+go run ./cmd/avatars-service server
+go run ./cmd/avatars-service worker
+go run ./cmd/avatars-service migrate status
 ```
 
-Do not document `docker-compose up --build` as a working local command until `docker-compose.yml` exists.
+Makefile:
+
+```bash
+make test
+make build
+make build-server
+make build-worker
+make build-contract-tests
+make run-server
+make run-worker
+make migrate-up
+make migrate-down
+make migrate-status
+```
+
+Contract runner:
+
+```bash
+BASE_URL=http://localhost:8080 go run ./cmd/avatar-contract-tests
+BASE_URL=http://localhost:8080 make contract-tests
+```
+
+Docker Compose:
+
+```bash
+docker compose up --build
+```
 
 ## Development Rules
 
@@ -164,7 +183,7 @@ Do not document `docker-compose up --build` as a working local command until `do
 ## Security and Configuration
 
 - Do not commit `.env`, secrets, uploaded avatars or `bin/` outputs.
-- Load and validate config in `internal/config`.
-- Validate upload size, MIME, magic bytes and decoded image format before storage.
+- Load and validate config in `internal/config` when external adapters are connected.
+- Validate upload size, magic bytes and decoded image format before storage.
 - Migrations must be an explicit operational step, not an automatic server/worker startup action.
-- Access logs for HTTP are required.
+- Access logs must not include request bodies, secrets or uploaded file contents.

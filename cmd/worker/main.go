@@ -1,15 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"time"
+
+	"go-avatar-service/internal/app"
 )
 
 func main() {
-	log.Println("Starting worker...")
-	for {
-		fmt.Println("Worker is running...")
-		time.Sleep(10 * time.Second)
+	if err := app.Run([]string{"avatars-service", "worker"}, nil); err != nil {
+		log.Fatal(err)
 	}
 }
