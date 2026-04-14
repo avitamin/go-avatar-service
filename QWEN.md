@@ -1,151 +1,170 @@
 # Avatar Service - Project Context
 
-## Project Overview
+## Назначение
 
-**Avatar Service** ("Аватарница") is a Go-based microservice for managing user avatars. It provides REST API functionality for uploading, retrieving, and deleting user avatar images. The project also includes a simple web interface for interacting with the service.
+`go-avatar-service` - Go-сервис для управления аватарками пользователей. Репозиторий сейчас является skeleton для дальнейшей реализации backend, worker, storage-интеграций и web endpoints.
 
-This is a **template repository** designed as a graduation project for a "Go Developer" course. It contains a basic project structure ready for further development, following Go best practices.
+## Приоритет документации
 
-## Architecture
+Актуальные источники требований:
 
-The project follows a standard Go service architecture with separation of concerns:
+1. `docs/requirements/confirmed-requirements.md`
+2. `docs/specs/avatar-service-v1.md`
 
-- **cmd/** - Application entry points
-  - `cmd/server/` - HTTP server binary
-  - `cmd/worker/` - Async worker binary for background task processing
-  
-- **internal/** - Internal application logic (to be developed)
-  - `api/` - API specifications (OpenAPI/Swagger)
-  - `config/` - Application configuration
-  - `domain/` - Domain entities
-  - `handlers/` - HTTP handlers
-  - `repository/` - Storage layer (database, S3)
-  - `services/` - Business logic
-  - `worker/` - Worker logic
+Исторический контекст:
 
-- **web/** - Web interface
-  - `web/static/index.html` - Single-page avatar upload UI (Tailwind CSS styled)
+1. `docs/requirements/assignment.md`
+2. `README.md`
+3. `QWEN.md`
 
-- **Other directories** (planned):
-  - `pkg/` - Public libraries
-  - `migrations/` - Database migrations
-  - `docker/` - Docker configurations
-  - `k8s/` - Kubernetes manifests
-  - `tests/` - Integration and e2e tests
-  - `docs/` - Project documentation
+Если этот файл конфликтует с confirmed requirements или v1 spec, используйте confirmed requirements и v1 spec.
 
-## Technologies
+Перед планированием, реализацией, ревью или тестированием задач читайте:
 
-- **Language:** Go 1.25.1
-- **Web UI:** HTML/JS with Tailwind CSS (via CDN)
-- **Infrastructure:** Docker Compose, Kubernetes (planned)
+- `docs/prompts/README.md`
+- `docs/prompts/context/project.md`
 
-## Building and Running
+Файлы в `docs/prompts/` являются reusable prompts. Используйте конкретный prompt как активную инструкцию только при явном запросе.
 
-### Prerequisites
+## Current Repository State
 
-- Go 1.25.1 or later
-- Docker and Docker Compose (for containerized deployment)
+Сейчас есть:
 
-### Build Commands
+- `cmd/server/main.go` - минимальный HTTP server placeholder на `:8080`.
+- `cmd/worker/main.go` - минимальный worker placeholder.
+- `web/static/index.html` - шаблонный upload UI.
+- `go.mod` - модуль `go-avatar-service`, Go `1.25.1`.
+- `docs/requirements/` - исходное ТЗ и подтвержденные требования.
+- `docs/specs/avatar-service-v1.md` - актуальная спека разработки v1.
+- `docs/prompts/` - reusable prompts для AI-агентов.
+
+Пока отсутствуют:
+
+- `internal/`
+- `migrations/`
+- `tests/`
+- `Dockerfile`
+- `docker-compose.yml`
+- `Makefile`
+
+Docker Compose и Dockerfile обязательны для MVP, но еще не реализованы в репозитории.
+
+## Target Architecture
+
+Confirmed technology choices:
+
+- Go HTTP server on Chi.
+- PostgreSQL for metadata.
+- MinIO for object storage.
+- RabbitMQ + worker for async image processing.
+- Standard `testing` package unless the project explicitly adopts another framework.
+
+Target internal package layout from v1 spec:
+
+- `internal/http` - router, middleware, handlers, web pages, JSON rendering.
+- `internal/service` - avatar service, health service, selection logic.
+- `internal/repository` - PostgreSQL repositories and repository interfaces.
+- `internal/storage` - MinIO adapter and storage interfaces.
+- `internal/broker` - RabbitMQ publisher/consumer and broker interfaces.
+- `internal/domain` - entities, statuses, domain errors, events.
+- `internal/config` - environment parsing and validation.
+- `internal/worker` - event handlers, retry logic, worker runner.
+- `internal/imageproc` - image sniffing, decode, resize and metadata.
+
+`pkg/` is not needed for MVP unless there is real public reusable API.
+
+The v1 spec prefers one binary with subcommands:
 
 ```bash
-# Install/update dependencies
+avatars-service server
+avatars-service worker
+avatars-service migrate up
+avatars-service migrate down
+avatars-service migrate status
+```
+
+The current skeleton still has separate `cmd/server` and `cmd/worker` entrypoints.
+
+## API Contract
+
+Required API endpoints:
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `POST` | `/api/v1/avatars` | Upload avatar. Requires `X-User-ID`. Multipart field is `file`. |
+| `GET` | `/api/v1/avatars/{avatar_id}` | Get exact avatar variant. |
+| `GET` | `/api/v1/users/{user_id}/avatar` | Get current user avatar with fallback. |
+| `DELETE` | `/api/v1/avatars/{avatar_id}` | Soft delete by avatar ID. Requires owner in `X-User-ID`. |
+| `DELETE` | `/api/v1/users/{user_id}/avatar` | Delete latest active avatar with available original. |
+| `GET` | `/api/v1/avatars/{avatar_id}/metadata` | Metadata for active avatar. |
+| `GET` | `/api/v1/users/{user_id}/avatars` | List active avatars by user, sorted `created_at DESC`. |
+| `GET` | `/health` | Checks postgres, minio and rabbitmq. |
+
+Supported `size` values:
+
+- `original`
+- `100x100`
+- `300x300`
+
+No `size` means `original`. Unsupported `size` returns `400`. Query parameter `format` is not supported in MVP.
+
+External statuses:
+
+- `processing`
+- `completed`
+- `failed`
+
+Soft-deleted records must look like `404` externally and must be absent from lists.
+
+## Web Contract
+
+Required web endpoints:
+
+- `GET /web/upload`
+- `GET /web/gallery/{user_id}`
+
+There is no required `POST /web/upload`. The web upload page must send directly to `POST /api/v1/avatars`. `user_id` is entered by the user in the form.
+
+Gallery rules:
+
+- List only, no delete.
+- Show records with available `original`.
+- If only `original` is available, the record is still shown.
+- If there are no DB records for the user, return `404`.
+- If records exist but none match the filter, return an empty list/page.
+- Validate `user_id` by the same rules as API user IDs.
+
+## Development Commands
+
+Commands available in the current skeleton:
+
+```bash
 go mod tidy
-
-# Build server binary
-go build -o ./bin/server ./cmd/server
-
-# Build worker binary
-go build -o ./bin/worker ./cmd/worker
-
-# Run server
 go run ./cmd/server
-
-# Run worker
 go run ./cmd/worker
+go build -o ./bin/server ./cmd/server
+go build -o ./bin/worker ./cmd/worker
+go test ./...
 ```
 
-### Docker Deployment
+Do not document `docker-compose up --build` as a working local command until `docker-compose.yml` exists.
 
-```bash
-# Start all services
-docker-compose up --build
-```
+## Development Rules
 
-After starting, the service will be available at `http://localhost:8080`.
+- Use TDD: failing test, minimal implementation, refactor after green tests.
+- Format Go code with `gofmt`.
+- Keep HTTP handlers thin and delegate behavior to services.
+- Keep storage concerns in repository/storage/broker adapters.
+- Use table-driven tests for validation, handlers and storage edge cases.
+- Place unit tests next to code in `*_test.go`.
+- Place integration/e2e tests in `tests/` when they need real external services.
+- Do not add Kubernetes manifests for MVP unless requirements change.
+- Do not add `pkg/` by default.
 
-### Web Interface
+## Security and Configuration
 
-The web UI is served at `http://localhost:8080/`. It provides a form to:
-- Enter a User ID
-- Upload an avatar image
-- View API responses
-
-The frontend sends requests to `/api/v1/avatars` with `X-User-ID` header and multipart form data.
-
-## Configuration
-
-Create a `.env` file based on `.env.example` (to be created) with:
-- Database connection credentials
-- S3/storage configuration
-- Other environment-specific settings
-
-Note: `.env` is gitignored.
-
-## Development Conventions
-
-### Project Structure
-
-Follow the standard Go project layout:
-- `cmd/` for main applications
-- `internal/` for private application code
-- `pkg/` for reusable public libraries
-
-### Coding Style
-
-- Follow standard Go conventions and idioms
-- Use structured logging
-- Implement proper error handling
-- Keep business logic in `internal/services/`
-- Keep HTTP handlers thin, delegating to services
-
-### Testing
-
-- Unit tests should be placed alongside the code they test (`*_test.go`)
-- Integration and e2e tests go in `tests/`
-
-## API Endpoints (Planned)
-
-Based on the web interface, the API should include:
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/v1/avatars` | Upload avatar (requires `X-User-ID` header) |
-| `GET` | `/api/v1/avatars/:userId` | Get user's avatar |
-| `DELETE` | `/api/v1/avatars/:userId` | Delete user's avatar |
-
-## Current State
-
-This is a **template/skeleton project** with:
-- ✅ Basic project structure
-- ✅ Minimal HTTP server (placeholder)
-- ✅ Minimal worker (placeholder)
-- ✅ Web UI for avatar upload
-- ❌ Full API implementation (pending)
-- ❌ Database integration (pending)
-- ❌ S3 storage integration (pending)
-- ❌ Worker task processing (pending)
-- ❌ Tests (pending)
-- ❌ Docker configuration (pending)
-
-## Key Files
-
-| File | Description |
-|------|-------------|
-| `go.mod` | Go module definition |
-| `cmd/server/main.go` | Server entry point |
-| `cmd/worker/main.go` | Worker entry point |
-| `web/static/index.html` | Avatar upload web interface |
-| `.gitignore` | Git ignore rules |
-| `README.md` | Project documentation (Russian) |
+- Do not commit `.env`, secrets, uploaded avatars or `bin/` outputs.
+- Load and validate config in `internal/config`.
+- Validate upload size, MIME, magic bytes and decoded image format before storage.
+- Migrations must be an explicit operational step, not an automatic server/worker startup action.
+- Access logs for HTTP are required.
