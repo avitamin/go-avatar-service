@@ -10,3 +10,13 @@ args = [
 
 [mcp_servers.jetbrains.env]
 IJ_MCP_SERVER_PORT = "64342"
+
+# Optional: hide reusable prompt library from Codex tool reads by default.
+# If enabled, Codex will not be able to read docs/prompts until this rule is removed
+# or a different permissions profile is selected.
+#
+# default_permissions = "project-with-prompts-hidden"
+#
+# [permissions.project-with-prompts-hidden.filesystem.":project_roots"]
+# "." = "write"
+# "docs/prompts" = "none"

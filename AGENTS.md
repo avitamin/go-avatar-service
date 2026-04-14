@@ -2,7 +2,13 @@
 
 ## Project Structure & Module Organization
 
-Это Go-модуль `go-avatar-service`. Точки входа находятся в `cmd/`: `cmd/server/main.go` запускает HTTP-сервер на `:8080`, а `cmd/worker/main.go` запускает фоновый worker. Веб-интерфейс сейчас представлен файлом `web/static/index.html`. По мере развития проекта держите приватную логику в `internal/` по структуре из README: `handlers/`, `services/`, `repository/`, `domain/`, `config/`, `worker/`. Публичный код кладите в `pkg/` только если он действительно рассчитан на переиспользование вне сервиса.
+Это Go-модуль `go-avatar-service`. Точки входа сейчас находятся в `cmd/`: `cmd/server/main.go` запускает HTTP-сервер на `:8080`, а `cmd/worker/main.go` запускает фоновый worker. Веб-интерфейс сейчас представлен файлом `web/static/index.html`. По мере развития проекта держите приватную логику в `internal/` по структуре из актуальной спеки v1: `http/`, `service/`, `repository/`, `storage/`, `broker/`, `domain/`, `config/`, `worker/`. Публичный код кладите в `pkg/` только если он действительно рассчитан на переиспользование вне сервиса.
+
+## AI Agent Prompts
+
+Промты и роли для AI-агентов находятся в `docs/prompts/`. Перед планированием, реализацией, ревью или тестированием задач читайте `docs/prompts/README.md` и `docs/prompts/context/project.md`.
+
+Актуальные источники требований: `docs/requirements/confirmed-requirements.md` и `docs/specs/avatar-service-v1.md`. Если они конфликтуют с README, QWEN.md или исходным ТЗ, используйте confirmed requirements и v1 spec как более приоритетные документы.
 
 ## Build, Test, and Development Commands
 
@@ -21,7 +27,7 @@ Docker Compose упомянут в README как будущий сценарий
 
 ## Testing Guidelines
 
-Используйте стандартный пакет `testing`, пока проект явно не выберет другой фреймворк. Unit-тесты размещайте рядом с кодом, например `internal/services/avatar_test.go`. Для валидации, handlers и storage edge cases предпочитайте table-driven tests. Интеграционные и e2e-тесты кладите в `tests/`, если им нужны реальные внешние сервисы.
+Разработка ведется через TDD: сначала формулируйте ожидаемое поведение тестом, убедитесь, что он падает по правильной причине, затем реализуйте минимальный код и выполните refactor при зеленых тестах. Используйте стандартный пакет `testing`, пока проект явно не выберет другой фреймворк. Unit-тесты размещайте рядом с кодом, например `internal/service/avatar_test.go`. Для валидации, HTTP handlers и storage edge cases предпочитайте table-driven tests. Интеграционные и e2e-тесты кладите в `tests/`, если им нужны реальные внешние сервисы.
 
 ## Commit & Pull Request Guidelines
 

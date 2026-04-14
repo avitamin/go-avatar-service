@@ -1,0 +1,4 @@
+# Prompt library is opt-in documentation.
+# Do not let Qwen Code load reusable prompts accidentally during search or bulk reads.
+/docs/prompts/
+
