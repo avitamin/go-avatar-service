@@ -34,6 +34,12 @@
 └── .gitignore          # Файл для исключения файлов из Git
 ```
 
+## Документация
+
+- [Исходное ТЗ](docs/requirements/assignment.md)
+- [Подтвержденные требования](docs/requirements/confirmed-requirements.md)
+- [Спека разработки v1](docs/specs/avatar-service-v1.md)
+
 ## Как начать работу
 
 1.  **Клонируйте репозиторий:**
