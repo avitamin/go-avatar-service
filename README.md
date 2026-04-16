@@ -1,6 +1,6 @@
 # Сервис "Аватарница"
 
-`go-avatar-service` - Go-сервис для управления аватарками пользователей. Текущая реализация закрывает MVP contract smoke на in-memory backend core и сохраняет целевую архитектуру v1: HTTP API, web upload/gallery, worker handlers, explicit migrations и single binary CLI.
+`go-avatar-service` - Go-сервис для управления аватарками пользователей. Текущая реализация закрывает MVP contract smoke на runtime adapters PostgreSQL/MinIO/RabbitMQ и сохраняет локальный in-memory fallback для unit tests и быстрого запуска без внешней инфраструктуры.
 
 ## Источники требований
 
@@ -20,16 +20,19 @@
 - `cmd/avatar-contract-tests/main.go` - black-box runner контрактных smoke-тестов HTTP API.
 - `internal/domain` - value objects, statuses, user ID и size validation.
 - `internal/http` - Chi router, handlers, JSON error model, access logs, web pages.
-- `internal/service` - application service, selection/fallback, soft delete, in-memory repository/storage для MVP и unit tests.
+- `internal/service` - application service, selection/fallback, soft delete, in-memory repository/storage для unit tests и fallback-режима без external adapters.
+- `internal/repository/postgres` - PostgreSQL adapter для metadata.
+- `internal/storage/minio` - MinIO adapter для original и thumbnail objects.
+- `internal/broker/rabbitmq` - RabbitMQ publisher/consumer topology для `avatar.uploaded` и `avatar.delete_requested`.
 - `internal/imageproc` - magic bytes sniffing, decode jpeg/png, thumbnail JPEG generation.
-- `internal/worker` - upload/delete handlers, idempotency checks, minimal retry.
+- `internal/worker` - upload/delete handlers, consumer runner, idempotency checks, minimal retry.
 - `internal/app` - CLI/bootstrap policy.
 - `migrations/` - initial SQL schema.
 - `Dockerfile` и `docker-compose.yml` - локальная MVP-инфраструктура.
 - `web/static/index.html` - upload UI, отправляет multipart поле `file`.
 - `tests/contract/` - contract smoke runner и self-tests.
 
-Важное ограничение текущего runtime: server/worker используют in-memory repository/storage/broker core. PostgreSQL, MinIO и RabbitMQ описаны в compose и требованиях, но реальные adapters и consumer loop еще не подключены к bootstrap. `avatars-service migrate` фиксирует CLI contract, но пока не применяет SQL к PostgreSQL.
+Текущий runtime переключается по env-конфигурации. Если заданы `POSTGRES_DSN`, полный набор `MINIO_*` и `RABBITMQ_URL`, `server` и `worker` используют реальные PostgreSQL/MinIO/RabbitMQ adapters. Если external storage env не задан, bootstrap оставляет in-memory repository/storage fallback для локальных unit-style запусков. `avatars-service migrate up|down|status` применяет SQL к PostgreSQL и остается отдельным явным operational step.
 
 ## CLI
 
@@ -169,10 +172,11 @@ Exit codes contract runner:
 Команда:
 
 ```bash
+docker compose run --rm server migrate up
 docker compose up --build
 ```
 
-На текущем этапе compose поднимает инфраструктуру и процессы, но runtime еще не подключает реальные PostgreSQL/MinIO/RabbitMQ adapters.
+Docker Compose поднимает PostgreSQL, MinIO, RabbitMQ, server и worker. Перед первым запуском server/worker нужен явный migration step; миграции не запускаются автоматически при старте процессов.
 
 Docker Compose публикует server на `http://localhost:8080`. Локальные Makefile/JetBrains конфигурации используют `http://localhost:18080`, чтобы не занимать стандартный compose-порт.
 
@@ -216,7 +220,13 @@ make docker-up-detached
 │   ├── domain/
 │   ├── http/
 │   ├── imageproc/
+│   ├── repository/
+│   │   └── postgres/
 │   ├── service/
+│   ├── storage/
+│   │   └── minio/
+│   ├── broker/
+│   │   └── rabbitmq/
 │   └── worker/
 ├── migrations/
 ├── tests/
@@ -229,12 +239,7 @@ make docker-up-detached
 └── Makefile
 ```
 
-Будущие external adapters размещайте по v1 spec:
-
-- `internal/repository/postgres`
-- `internal/storage/minio`
-- `internal/broker/rabbitmq`
-- `internal/config`
+Новые external adapters размещайте по v1 spec. Текущие PostgreSQL, MinIO и RabbitMQ adapters уже находятся в `internal/repository/postgres`, `internal/storage/minio` и `internal/broker/rabbitmq`. Конфигурация пока читается в `internal/app`; при росте bootstrap-логики ее стоит вынести в `internal/config`.
 
 `pkg/` добавляйте только при появлении реального public reusable API.
 

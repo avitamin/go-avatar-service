@@ -2,7 +2,7 @@
 
 ## Назначение
 
-`go-avatar-service` - Go-сервис для управления аватарками пользователей. Текущая кодовая база содержит MVP contract implementation на in-memory core: HTTP API на Chi, web upload/gallery, worker handlers, CLI bootstrap, SQL migration files и Docker Compose.
+`go-avatar-service` - Go-сервис для управления аватарками пользователей. Текущая кодовая база содержит MVP contract implementation с runtime adapters PostgreSQL/MinIO/RabbitMQ: HTTP API на Chi, web upload/gallery, worker consumer runner, CLI bootstrap, SQL migrations и Docker Compose. In-memory core сохранен для unit tests и fallback-запуска без внешней инфраструктуры.
 
 ## Приоритет документации
 
@@ -34,7 +34,10 @@
 - `internal/app` - CLI/bootstrap.
 - `internal/domain` - statuses, size и user ID validation.
 - `internal/http` - Chi router, handlers, JSON errors, access logs, web pages.
-- `internal/service` - application service, in-memory repository/storage, selection/fallback, soft delete.
+- `internal/service` - application service, selection/fallback, soft delete, in-memory repository/storage для tests/fallback.
+- `internal/repository/postgres` - PostgreSQL metadata adapter.
+- `internal/storage/minio` - MinIO object storage adapter.
+- `internal/broker/rabbitmq` - RabbitMQ publisher/consumer topology.
 - `internal/imageproc` - image sniff/decode/thumbnail helpers.
 - `internal/worker` - upload/delete handlers, retry, idempotency.
 - `migrations/` - initial SQL schema files.
@@ -43,12 +46,13 @@
 - `tests/contract/` - contract runner и self-tests.
 - `Makefile` - build/test/run/migrate targets.
 
-Current runtime gaps:
+Current runtime notes:
 
-- PostgreSQL/MinIO/RabbitMQ adapters еще не подключены; server/worker используют in-memory implementation.
-- RabbitMQ consumer loop еще не подключен к worker bootstrap.
-- `avatars-service migrate` фиксирует CLI contract, но пока не применяет SQL к PostgreSQL.
-- `/health` возвращает компонентную модель, но runtime connectivity checks пока не реальные.
+- Server/worker используют PostgreSQL/MinIO adapters, когда заданы `POSTGRES_DSN` и полный набор `MINIO_*`.
+- RabbitMQ publisher/consumer включается при `RABBITMQ_URL`; worker обрабатывает `avatar.uploaded` и `avatar.delete_requested`.
+- Если external storage env не задан, bootstrap использует in-memory repository/storage fallback.
+- `avatars-service migrate up|down|status` применяет SQL к PostgreSQL и остается отдельным явным шагом.
+- `/health` возвращает компонентную модель; глубокие runtime connectivity checks остаются ограниченными.
 
 ## Target Architecture
 
@@ -60,7 +64,7 @@ Confirmed technology choices:
 - RabbitMQ + worker for async image processing.
 - Standard `testing` package unless the project explicitly adopts another framework.
 
-Target package additions for future adapters:
+Runtime adapter packages:
 
 - `internal/repository/postgres`
 - `internal/storage/minio`

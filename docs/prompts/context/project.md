@@ -10,16 +10,19 @@
 
 ## Current Repository State
 
-В репозитории есть MVP contract implementation на in-memory core.
+В репозитории есть MVP contract implementation с runtime adapters PostgreSQL/MinIO/RabbitMQ. In-memory repository/storage остаются для unit tests и fallback-запуска без внешней инфраструктуры.
 
 - `cmd/avatars-service/main.go` - основной single binary CLI с subcommands `server`, `worker`, `migrate`.
 - `cmd/server/main.go` и `cmd/worker/main.go` - thin compatibility wrappers вокруг нового bootstrap.
 - `cmd/avatar-contract-tests/main.go` - black-box CLI runner контрактных smoke-тестов HTTP API.
 - `internal/domain` - statuses, user ID validation, size validation.
 - `internal/http` - Chi router, handlers, JSON error model, access logs, web endpoints.
-- `internal/service` - application service, selection/fallback, soft delete, in-memory repository/storage.
+- `internal/service` - application service, selection/fallback, soft delete, in-memory repository/storage для tests/fallback.
+- `internal/repository/postgres` - PostgreSQL adapter для metadata.
+- `internal/storage/minio` - MinIO adapter для objects.
+- `internal/broker/rabbitmq` - RabbitMQ publisher/consumer topology.
 - `internal/imageproc` - magic bytes sniffing, decode, JPEG thumbnails.
-- `internal/worker` - upload/delete handlers, idempotency, minimal retry.
+- `internal/worker` - upload/delete handlers, consumer runner, idempotency, minimal retry.
 - `internal/app` - CLI/bootstrap policy.
 - `migrations/` - initial SQL schema.
 - `Dockerfile` и `docker-compose.yml` - локальная MVP-инфраструктура.
@@ -27,14 +30,15 @@
 - `tests/contract/` - автотестовый runner endpoints и self-tests через `httptest`.
 - `Makefile` - цели для сборки, `go test`, run/migrate, contract smoke runner и Docker Compose workflow.
 - `.idea/runConfigurations/` - shared JetBrains run configurations для `cmd/avatars-service`, Makefile-целей и Docker Compose workflow.
-- `go.mod` объявляет модуль `go-avatar-service` и зависимость `github.com/go-chi/chi/v5`.
+- `go.mod` объявляет модуль `go-avatar-service` и runtime dependencies для Chi, pgx, MinIO и RabbitMQ.
 
-Текущие runtime gaps:
+Текущие runtime notes:
 
-- PostgreSQL/MinIO/RabbitMQ adapters еще не подключены к bootstrap; server/worker используют in-memory implementation.
-- RabbitMQ consumer loop еще не подключен к worker bootstrap.
-- `avatars-service migrate` фиксирует CLI contract, но пока не применяет SQL к PostgreSQL.
-- `/health` имеет компонентную модель, но runtime connectivity checks пока не реальные.
+- Server/worker используют PostgreSQL/MinIO adapters, когда заданы `POSTGRES_DSN` и полный набор `MINIO_*`.
+- RabbitMQ publisher/consumer включается при `RABBITMQ_URL`; worker обрабатывает `avatar.uploaded` и `avatar.delete_requested`.
+- Если external storage env не задан, bootstrap использует in-memory repository/storage fallback.
+- `avatars-service migrate up|down|status` применяет SQL к PostgreSQL и остается отдельным явным шагом.
+- `/health` имеет компонентную модель; глубокие runtime connectivity checks пока ограничены.
 
 ## Requirements Priority
 
@@ -50,7 +54,7 @@
 
 - Frontend уже отправляет multipart поле `file`, как требует API contract.
 - Текущая структура имеет основной `cmd/avatars-service`; `cmd/server` и `cmd/worker` оставлены только как compatibility wrappers.
-- Docker Compose файл присутствует, но реальные external adapters еще не подключены к runtime.
+- Docker Compose поднимает PostgreSQL, MinIO, RabbitMQ, server и worker; перед server/worker нужен явный migration step.
 - README/QWEN обновлены под текущее состояние; если они снова разойдутся с confirmed requirements/v1 spec, приоритет остается за confirmed requirements/v1 spec.
 - Исходное ТЗ допускает Echo или Chi, RabbitMQ или Kafka; confirmed requirements фиксируют Chi и RabbitMQ.
 - Исходное ТЗ упоминает `POST /web/upload`; confirmed requirements и v1 spec говорят, что отдельный `POST /web/upload` не нужен.

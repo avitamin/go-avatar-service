@@ -31,7 +31,7 @@
 
 В `.idea/runConfigurations/` сохранены shared JetBrains конфигурации: `Server`, `Worker`, `Avatar Contract Tests`, `Make Test`, `Make Build Contract Tests`, `Make Contract Tests`, `Make Docker Build`, `Make Docker Up Build`, `Make Docker Up Detached`, `Make Docker Down`, `Make Docker Ps`, `Make Docker Logs`, `Make Docker Contract Tests`. Локальные server/contract конфигурации используют `http://localhost:18080`, Docker Compose конфигурации используют compose-порт `http://localhost:8080`.
 
-Docker Compose присутствует и публикует server на `http://localhost:8080`. Runtime adapters PostgreSQL/MinIO/RabbitMQ еще не подключены к bootstrap, поэтому текущий server/worker используют in-memory core.
+Docker Compose публикует server на `http://localhost:8080` и поднимает PostgreSQL, MinIO, RabbitMQ, server и worker. При заданных `POSTGRES_DSN`, `MINIO_*` и `RABBITMQ_URL` server/worker используют реальные runtime adapters; без external storage env остается in-memory fallback для локальных unit-style запусков. Миграции выполняются отдельным явным шагом, например `docker compose run --rm server migrate up`.
 
 Host-порты Docker Compose можно переопределять через локальный `.env`; шаблон дефолтов хранится в `.env.example`, сам `.env` не коммитится.
 
