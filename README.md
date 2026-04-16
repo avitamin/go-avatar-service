@@ -227,6 +227,38 @@ go test ./internal/... -cover
 
 Backend-пакеты с логикой сервиса и worker должны держать покрытие выше 50%. Coverage не заменяет requirement coverage: обязательное поведение из confirmed requirements/v1 spec должно иметь явный тест или documented gap.
 
+## Git Workflow
+
+Base branch для MVP: `v1`.
+
+Обычный порядок работы:
+
+```bash
+git checkout v1
+git pull --ff-only
+git checkout -b feature/<short-name>
+```
+
+Типы рабочих веток:
+
+- `feature/<short-name>` - новая функциональность.
+- `fix/<short-name>` - исправление поведения или багов.
+- `test/<short-name>` - тесты без production changes.
+- `docs/<short-name>` - документация и contributor guidance.
+- `chore/<short-name>` - инфраструктура, локальные run configs, Makefile, housekeeping.
+
+Правила:
+
+- Одна задача - одна рабочая ветка и один PR, если изменения не являются явно связанным маленьким follow-up.
+- Не коммитьте напрямую в `v1` в обычном ручном workflow; открывайте PR в `v1`.
+- Перед PR запустите `go test ./...`.
+- Для API/web изменений дополнительно запустите contract smoke: `make run-server` в одном терминале и `make contract-tests` в другом.
+- Для изменений Docker/миграций укажите в PR, какие внешние сервисы нужны для проверки.
+- Commit message пишите в текущем стиле истории: `feat: ...`, `fix: ...`, `docs: ...`, `test: ...`, `refactor: ...`, `chore: ...`.
+- Предпочтительный merge policy для PR: squash merge, чтобы история `v1` оставалась короткой и читаемой.
+
+Для локальной AI-agent сессии прямой commit допустим только если пользователь явно попросил закоммитить изменения. В этом случае агент сначала проверяет `git status`, коммитит только просмотренные связанные файлы и не трогает unrelated changes.
+
 ## Безопасность и конфигурация
 
 - Не коммитьте `.env`, секреты, загруженные аватары и бинарники из `bin/`.

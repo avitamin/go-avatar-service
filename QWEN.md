@@ -192,6 +192,36 @@ Docker Compose publishes the server on `http://localhost:8080`; local Makefile a
 - Do not add Kubernetes manifests for MVP unless requirements change.
 - Do not add `pkg/` by default.
 
+## Git Workflow
+
+Base branch for MVP: `v1`.
+
+Use short-lived task branches from `v1`:
+
+- `feature/<short-name>`
+- `fix/<short-name>`
+- `test/<short-name>`
+- `docs/<short-name>`
+- `chore/<short-name>`
+
+Default flow:
+
+```bash
+git checkout v1
+git pull --ff-only
+git checkout -b feature/<short-name>
+```
+
+Rules:
+
+- One task should usually map to one branch and one PR.
+- Do not commit directly to `v1` in normal manual workflow.
+- Before PR, run `go test ./...`.
+- For API/web changes, also run `make run-server` and `make contract-tests`.
+- Commit messages follow the current Conventional Commit style: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`.
+- Preferred PR merge policy: squash merge.
+- Direct commits from an AI-agent session are allowed only when the user explicitly asks for a commit; commit only reviewed related files and never include unrelated changes.
+
 ## Security and Configuration
 
 - Do not commit `.env`, secrets, uploaded avatars or `bin/` outputs.

@@ -67,3 +67,12 @@
 - Локальные Makefile/JetBrains defaults используют `HTTP_ADDR=:18080` и `BASE_URL=http://localhost:18080`, чтобы не занимать compose-порт `8080`.
 - Не добавлять `pkg/`, если нет реального reusable public API.
 - Не коммитить `.env`, загруженные аватары, бинарники из `bin/` и секреты.
+
+## Git Workflow
+
+- Base branch для MVP: `v1`.
+- Рабочие ветки создавайте от актуального `v1`: `feature/<short-name>`, `fix/<short-name>`, `test/<short-name>`, `docs/<short-name>`, `chore/<short-name>`.
+- Обычный ручной workflow идет через PR в `v1`; прямой commit в `v1` не используется без явной договоренности.
+- Для AI-agent сессий прямой commit допустим только по явной просьбе пользователя.
+- Перед PR или commit запускайте `go test ./...`; для API/web изменений дополнительно проверяйте `make run-server` + `make contract-tests`.
+- Commit messages используют Conventional Commit style из истории: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`.
