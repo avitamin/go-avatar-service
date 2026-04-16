@@ -12,6 +12,8 @@
 - `internal/service` - upload, metadata, list/fallback paths на in-memory core.
 - `internal/http` - routing overhead для health, read и upload.
 - `internal/worker` - thumbnail generation через upload handler и быстрый retry path.
+- `internal/repository/postgres` - opt-in benchmarks PostgreSQL repository operations.
+- `internal/broker/rabbitmq` - opt-in benchmarks RabbitMQ publish/get/ack roundtrip.
 
 ## Команды
 
@@ -31,6 +33,24 @@ go test -run='^$' -bench=. -benchmem ./...
 
 ```bash
 go test -run='^$' -bench=. -benchtime=1x -benchmem ./...
+```
+
+External adapter benchmarks пропускаются, если не заданы env-переменные подключения:
+
+```bash
+POSTGRES_DSN='postgres://avatars:avatars@localhost:5432/avatars?sslmode=disable' \
+RABBITMQ_URL='amqp://guest:guest@localhost:5672/' \
+make bench-external
+```
+
+Отдельные прогоны:
+
+```bash
+POSTGRES_DSN='postgres://avatars:avatars@localhost:5432/avatars?sslmode=disable' \
+go test -run='^$' -bench='BenchmarkPostgres' -benchmem ./internal/repository/postgres
+
+RABBITMQ_URL='amqp://guest:guest@localhost:5672/' \
+go test -run='^$' -bench='BenchmarkRabbitMQ' -benchmem ./internal/broker/rabbitmq
 ```
 
 Точечный прогон пакета:
@@ -66,7 +86,7 @@ go tool pprof -top /tmp/avatar-mem.out
 
 `make bench` стоит запускать опционально:
 
-- перед изменениями в `internal/imageproc`, `internal/service`, `internal/http` или `internal/worker`;
+- перед изменениями в `internal/imageproc`, `internal/service`, `internal/http`, `internal/worker`, `internal/repository/postgres` или `internal/broker/rabbitmq`;
 - после изменения алгоритмов thumbnail generation, fallback/list selection, storage/repository paths или middleware;
 - перед PR, если изменение может повлиять на latency, allocations или CPU-bound обработку изображений.
 
@@ -111,6 +131,8 @@ Go benchmark output показывает:
 - `ThumbnailJPEG` и `UploadHandlerGenerateThumbnails`: CPU и allocations image processing path.
 - `ListActiveByUser` и `ReadUserAvatarFallback`: стоимость selection/fallback при росте числа записей.
 - `RouterUploadJPEG`: upload validation + multipart + service path.
+- `Postgres*`: стоимость SQL repository операций при реальном PostgreSQL.
+- `RabbitMQ*`: broker roundtrip publish/get/ack для upload/delete queues.
 
 Не сравнивайте единичные прогоны как точные абсолютные значения: локальная нагрузка, CPU governor и кеши заметно влияют на цифры. Для регрессий используйте повторные прогоны одной и той же команды на одной машине.
 
@@ -121,6 +143,8 @@ Go benchmark output показывает:
 | Высокий `ns/op` в `BenchmarkThumbnailJPEG` или `BenchmarkUploadHandlerGenerateThumbnails` | CPU-bound image processing | CPU profile, resize loop, encode/decode cost |
 | Рост `B/op` или `allocs/op` в `BenchmarkRouterUploadJPEG` | HTTP upload path | multipart parsing, image decode, request/response allocations |
 | Рост `BenchmarkListActiveByUser` | Repository selection/sort | линейный scan, sort cost, размер user history |
+| Рост `BenchmarkPostgresCreate`, `BenchmarkPostgresGetByID` или `BenchmarkPostgresListActiveByUser` | PostgreSQL repository adapter | query plan, indexes, connection pool, локальная нагрузка БД |
+| Рост `BenchmarkRabbitMQPublishGetAckUpload` или `BenchmarkRabbitMQPublishGetAckDelete` | RabbitMQ broker adapter | broker durability, queue depth, disk latency, network/localhost overhead |
 | Рост `BenchmarkReadUserAvatarFallback` | User avatar fallback | количество skipped records, storage `Get`/`Exists`, copy allocations |
 | Рост `BenchmarkRouterHealth` или `BenchmarkRouterReadAvatar` | Router/middleware overhead | access log middleware, JSON/binary response path |
 
@@ -128,4 +152,4 @@ Go benchmark output показывает:
 
 ## Ограничения
 
-Текущие benchmarks используют in-memory repository/storage и не измеряют PostgreSQL, MinIO или RabbitMQ adapters. Когда runtime adapters появятся, для них нужно добавить отдельные benchmarks или integration performance checks, чтобы не смешивать CPU-only и network/storage-bound сценарии.
+Базовые benchmarks используют in-memory repository/storage и подходят для CPU/allocation hot paths без внешней инфраструктуры. PostgreSQL и RabbitMQ benchmarks являются opt-in: они требуют поднятых сервисов и env-переменных подключения, поэтому их результаты нельзя напрямую сравнивать с in-memory пакетами. MinIO benchmark пока не добавлен.

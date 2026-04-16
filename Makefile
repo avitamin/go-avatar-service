@@ -11,13 +11,16 @@ COMPOSE_FILE ?= docker-compose.yml
 COMPOSE_HTTP_PORT ?= 8080
 COMPOSE_BASE_URL ?= http://localhost:$(COMPOSE_HTTP_PORT)
 
-.PHONY: test bench build build-server build-worker build-contract-tests contract-tests run-server run-worker migrate-up migrate-down migrate-status docker-build docker-up docker-up-build docker-up-detached docker-down docker-down-volumes docker-ps docker-logs docker-contract-tests
+.PHONY: test bench bench-external build build-server build-worker build-contract-tests contract-tests run-server run-worker migrate-up migrate-down migrate-status docker-build docker-up docker-up-build docker-up-detached docker-down docker-down-volumes docker-ps docker-logs docker-contract-tests
 
 test:
 	go test ./...
 
 bench:
 	go test -run='^$$' -bench=. -benchmem ./...
+
+bench-external:
+	go test -run='^$$' -bench='Benchmark(Postgres|RabbitMQ)' -benchmem ./internal/repository/postgres ./internal/broker/rabbitmq
 
 build:
 	go build -o ./bin/avatars-service ./cmd/avatars-service

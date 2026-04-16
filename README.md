@@ -267,7 +267,17 @@ make bench
 go test -run='^$' -bench=. -benchmem ./...
 ```
 
-Бенчмарки покрывают domain validation, image processing, service fallback/list paths, HTTP router paths и worker thumbnail generation. Запускайте их опционально для изменений, которые могут повлиять на CPU, allocations или latency hot paths; для обычных изменений обязательной проверкой остается `go test ./...`.
+Бенчмарки покрывают domain validation, image processing, service fallback/list paths, HTTP router paths, worker thumbnail generation, а также opt-in PostgreSQL/RabbitMQ adapter paths.
+
+External adapters запускаются отдельно, если подняты сервисы и заданы env:
+
+```bash
+POSTGRES_DSN='postgres://avatars:avatars@localhost:5432/avatars?sslmode=disable' \
+RABBITMQ_URL='amqp://guest:guest@localhost:5672/' \
+make bench-external
+```
+
+Запускайте benchmarks опционально для изменений, которые могут повлиять на CPU, allocations или latency hot paths; для обычных изменений обязательной проверкой остается `go test ./...`.
 
 ## Git Workflow
 
