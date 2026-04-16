@@ -65,6 +65,7 @@
 - Contract runner запускать против уже поднятого сервиса: `BASE_URL=http://localhost:18080 ./bin/avatar-contract-tests`.
 - Предпочтительная короткая команда для локального запуска: `make run-server` и `make contract-tests`.
 - Локальные Makefile/JetBrains server и contract defaults используют `HTTP_ADDR=:18080` и `BASE_URL=http://localhost:18080`, чтобы не занимать compose-порт `8080`; Docker Compose targets и configs используют `http://localhost:8080`.
+- Host-порты Docker Compose переопределяются через локальный `.env`; дефолты документирует `.env.example`, `.env` не коммитится.
 - Не добавлять `pkg/`, если нет реального reusable public API.
 - Не коммитить `.env`, загруженные аватары, бинарники из `bin/` и секреты.
 

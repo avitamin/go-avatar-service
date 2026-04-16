@@ -1,10 +1,15 @@
+ifneq (,$(wildcard .env))
+include .env
+endif
+
 LOCAL_HTTP_ADDR ?= :18080
 LOCAL_BASE_URL ?= http://localhost:18080
 HTTP_ADDR ?= $(LOCAL_HTTP_ADDR)
 BASE_URL ?= $(LOCAL_BASE_URL)
 COMPOSE ?= docker compose
 COMPOSE_FILE ?= docker-compose.yml
-COMPOSE_BASE_URL ?= http://localhost:8080
+COMPOSE_HTTP_PORT ?= 8080
+COMPOSE_BASE_URL ?= http://localhost:$(COMPOSE_HTTP_PORT)
 
 .PHONY: test build build-server build-worker build-contract-tests contract-tests run-server run-worker migrate-up migrate-down migrate-status docker-build docker-up docker-up-build docker-up-detached docker-down docker-down-volumes docker-ps docker-logs docker-contract-tests
 

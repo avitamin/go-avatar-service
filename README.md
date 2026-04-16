@@ -174,6 +174,14 @@ docker compose up --build
 
 Docker Compose публикует server на `http://localhost:8080`. Локальные Makefile/JetBrains конфигурации используют `http://localhost:18080`, чтобы не занимать стандартный compose-порт.
 
+Host-порты Docker Compose можно переопределить через локальный `.env`. Шаблон лежит в `.env.example`, сам `.env` игнорируется git. Например, если порт MinIO console `9001` занят:
+
+```bash
+cp .env.example .env
+printf 'COMPOSE_MINIO_CONSOLE_PORT=19001\n' >> .env
+make docker-up-detached
+```
+
 ## JetBrains Run Configurations
 
 В `.idea/runConfigurations/` сохранены shared конфигурации:

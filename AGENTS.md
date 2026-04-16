@@ -32,6 +32,8 @@
 
 Docker Compose присутствует и публикует server на `http://localhost:8080`. Runtime adapters PostgreSQL/MinIO/RabbitMQ еще не подключены к bootstrap, поэтому текущий server/worker используют in-memory core.
 
+Host-порты Docker Compose можно переопределять через локальный `.env`; шаблон дефолтов хранится в `.env.example`, сам `.env` не коммитится.
+
 ## Coding Style & Naming Conventions
 
 Перед коммитом форматируйте Go-код через `gofmt`. Разделяйте ответственность: обработка HTTP-запросов в handlers, бизнес-логика в services, хранение данных в repositories, доменные типы в domain. Следуйте Go-неймингу: экспортируемые идентификаторы в `PascalCase`, неэкспортируемые в `camelCase`, тесты в файлах `*_test.go`, директории команд называйте по бинарнику.

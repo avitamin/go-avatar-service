@@ -11,7 +11,7 @@ services:
       MINIO_BUCKET: "avatars"
       RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
     ports:
-      - "8080:8080"
+      - "${COMPOSE_HTTP_PORT:-8080}:8080"
     depends_on:
       - postgres
       - minio
@@ -39,13 +39,13 @@ services:
       POSTGRES_USER: avatars
       POSTGRES_PASSWORD: avatars
     ports:
-      - "5432:5432"
+      - "${COMPOSE_POSTGRES_PORT:-5432}:5432"
 
   rabbitmq:
     image: rabbitmq:3-management
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${COMPOSE_RABBITMQ_PORT:-5672}:5672"
+      - "${COMPOSE_RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
 
   minio:
     image: minio/minio:latest
@@ -54,5 +54,5 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${COMPOSE_MINIO_API_PORT:-9000}:9000"
+      - "${COMPOSE_MINIO_CONSOLE_PORT:-9001}:9001"
