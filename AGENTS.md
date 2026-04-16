@@ -21,12 +21,13 @@
 - `go build -o ./bin/avatars-service ./cmd/avatars-service`: собирает основной single binary.
 - `go build -o ./bin/avatar-contract-tests ./cmd/avatar-contract-tests`: собирает black-box бинарник контрактных автотестов.
 - `BASE_URL=http://localhost:18080 ./bin/avatar-contract-tests`: запускает contract smoke tests против локального сервиса на незанятом базовом URL.
-- `make test`, `make build`, `make build-server`, `make build-worker`, `make build-contract-tests`: короткие Makefile-цели для базовых команд.
+- `make test`, `make bench`, `make build`, `make build-server`, `make build-worker`, `make build-contract-tests`: короткие Makefile-цели для базовых команд.
 - `make run-server`: запускает server с локальным default `HTTP_ADDR=:18080`.
 - `make contract-tests`: собирает и запускает contract smoke runner с локальным default `BASE_URL=http://localhost:18080`.
 - `BASE_URL=http://localhost:8080 make contract-tests`: запускает contract smoke runner против явно указанного сервиса, например compose-порта.
 - `make docker-build`, `make docker-up-build`, `make docker-up-detached`, `make docker-down`, `make docker-ps`, `make docker-logs`, `make docker-contract-tests`: Makefile-цели для Docker Compose workflow.
 - `go test ./...`: запускает все Go-тесты, включая self-tests contract runner'а.
+- `go test -run='^$' -bench=. -benchmem ./...`: запускает benchmarks без повторного запуска unit-тестов.
 
 В `.idea/runConfigurations/` сохранены shared JetBrains конфигурации: `Server`, `Worker`, `Avatar Contract Tests`, `Make Test`, `Make Build Contract Tests`, `Make Contract Tests`, `Make Docker Build`, `Make Docker Up Build`, `Make Docker Up Detached`, `Make Docker Down`, `Make Docker Ps`, `Make Docker Logs`, `Make Docker Contract Tests`. Локальные server/contract конфигурации используют `http://localhost:18080`, Docker Compose конфигурации используют compose-порт `http://localhost:8080`.
 
@@ -41,6 +42,8 @@ Host-порты Docker Compose можно переопределять чере�
 ## Testing Guidelines
 
 Разработка ведется через TDD: сначала формулируйте ожидаемое поведение тестом, убедитесь, что он падает по правильной причине, затем реализуйте минимальный код и выполните refactor при зеленых тестах. Используйте стандартный пакет `testing`, пока проект явно не выберет другой фреймворк. Unit-тесты размещайте рядом с кодом, например `internal/service/avatar_test.go`. Для валидации, HTTP handlers и storage edge cases предпочитайте table-driven tests. Интеграционные и e2e-тесты кладите в `tests/`, если им нужны реальные внешние сервисы. Contract smoke runner в `tests/contract` не импортирует `internal/` код и проверяет API только через HTTP.
+
+Benchmark-прогон не является обязательным gate для каждого изменения. Запускайте `make bench` опционально перед PR или отчетом, если изменения затрагивают image processing, service selection/fallback, HTTP middleware/router hot paths, worker thumbnail generation или могут повлиять на allocations/latency.
 
 ## Commit & Pull Request Guidelines
 

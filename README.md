@@ -103,6 +103,7 @@ Upload из web идет напрямую в `POST /api/v1/avatars`; отдел�
 go mod tidy
 go test ./...
 go test ./internal/... -cover
+go test -run='^$' -bench=. -benchmem ./...
 go build ./cmd/avatars-service ./cmd/server ./cmd/worker ./cmd/avatar-contract-tests
 ```
 
@@ -110,6 +111,7 @@ Makefile:
 
 ```bash
 make test
+make bench
 make build
 make build-server
 make build-worker
@@ -248,6 +250,24 @@ go test ./internal/... -cover
 ```
 
 Backend-пакеты с логикой сервиса и worker должны держать покрытие выше 50%. Coverage не заменяет requirement coverage: обязательное поведение из confirmed requirements/v1 spec должно иметь явный тест или documented gap.
+
+## Benchmarking
+
+Локальный benchmark workflow описан в [docs/benchmarking.md](docs/benchmarking.md).
+
+Основная команда:
+
+```bash
+make bench
+```
+
+Она запускает:
+
+```bash
+go test -run='^$' -bench=. -benchmem ./...
+```
+
+Бенчмарки покрывают domain validation, image processing, service fallback/list paths, HTTP router paths и worker thumbnail generation. Запускайте их опционально для изменений, которые могут повлиять на CPU, allocations или latency hot paths; для обычных изменений обязательной проверкой остается `go test ./...`.
 
 ## Git Workflow
 
