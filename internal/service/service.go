@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -74,12 +76,24 @@ func NewAvatarService(repo Repository, storage Storage, broker Broker) *AvatarSe
 		broker:  broker,
 		now:     time.Now,
 		nextID: func() string {
+			id, err := randomAvatarID()
+			if err == nil {
+				return id
+			}
 			mu.Lock()
 			defer mu.Unlock()
 			seq++
 			return fmt.Sprintf("avatar-%d", seq)
 		},
 	}
+}
+
+func randomAvatarID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return "avatar-" + hex.EncodeToString(b[:]), nil
 }
 
 func (s *AvatarService) Upload(ctx context.Context, in UploadInput) (AvatarDTO, error) {

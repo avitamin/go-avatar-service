@@ -86,6 +86,83 @@ func TestDeleteHandlerIdempotentPhysicalDelete(t *testing.T) {
 	}
 }
 
+func TestRunnerDispatchesUploadDeleteAndAcks(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	repo := service.NewMemoryRepository()
+	storage := service.NewMemoryStorage()
+	svc := service.NewAvatarService(repo, storage, nil)
+	created, _ := svc.Upload(ctx, service.UploadInput{UserID: "user-1", FileName: "a.jpg", Content: encodeJPEG(t), ContentType: "image/jpeg"})
+	if err := svc.DeleteByID(ctx, created.ID, "user-1"); err != nil {
+		t.Fatalf("DeleteByID() error = %v", err)
+	}
+	a, _ := repo.GetByID(ctx, created.ID)
+	deliveries := make(chan Delivery, 2)
+	consumer := &stubConsumer{deliveries: deliveries}
+	acked := 0
+	deliveries <- Delivery{RoutingKey: RoutingKeyUploaded, Body: []byte(`{"avatar_id":"` + created.ID + `"}`), Ack: func() error {
+		acked++
+		return nil
+	}}
+	deliveries <- Delivery{RoutingKey: RoutingKeyDeleteRequested, Body: []byte(created.ID), Ack: func() error {
+		acked++
+		cancel()
+		return nil
+	}}
+	close(deliveries)
+
+	runner := NewRunner(
+		consumer,
+		NewUploadHandler(repo, storage, slog.Default()),
+		NewDeleteHandler(repo, storage, slog.Default()),
+		slog.Default(),
+	)
+	if err := runner.Run(ctx); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if acked != 2 {
+		t.Fatalf("acked = %d, want 2", acked)
+	}
+	if storage.Exists(context.Background(), a.OriginalKey) {
+		t.Fatal("delete event must physically remove original")
+	}
+}
+
+func TestRunnerNacksHandlerErrors(t *testing.T) {
+	ctx := context.Background()
+	deliveries := make(chan Delivery, 1)
+	consumer := &stubConsumer{deliveries: deliveries}
+	nacked := false
+	deliveries <- Delivery{RoutingKey: RoutingKeyUploaded, Body: nil, Nack: func(requeue bool) error {
+		nacked = requeue
+		return nil
+	}}
+	close(deliveries)
+
+	runner := NewRunner(
+		consumer,
+		NewUploadHandler(service.NewMemoryRepository(), service.NewMemoryStorage(), slog.Default()),
+		NewDeleteHandler(service.NewMemoryRepository(), service.NewMemoryStorage(), slog.Default()),
+		slog.Default(),
+	)
+	if err := runner.Run(ctx); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !nacked {
+		t.Fatal("handler error must nack with requeue")
+	}
+}
+
+type stubConsumer struct {
+	deliveries <-chan Delivery
+	closed     bool
+}
+
+func (c *stubConsumer) Consume(context.Context) (<-chan Delivery, error) { return c.deliveries, nil }
+func (c *stubConsumer) Close() error {
+	c.closed = true
+	return nil
+}
+
 func encodeJPEG(t *testing.T) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
