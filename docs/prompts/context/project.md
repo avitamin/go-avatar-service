@@ -26,7 +26,7 @@
 - `web/static/index.html` - готовый upload UI, multipart поле `file`.
 - `tests/contract/` - автотестовый runner endpoints и self-tests через `httptest`.
 - `Makefile` - цели для сборки, `go test`, run/migrate и contract smoke runner.
-- `.idea/runConfigurations/` - shared JetBrains run configurations для entrypoints и Makefile-целей.
+- `.idea/runConfigurations/` - shared JetBrains run configurations для `cmd/avatars-service`, Makefile-целей и локального `http://localhost:18080`.
 - `go.mod` объявляет модуль `go-avatar-service` и зависимость `github.com/go-chi/chi/v5`.
 
 Текущие runtime gaps:
@@ -62,7 +62,8 @@
 - Coverage target `>50%` является минимальной метрикой для backend-пакетов с логикой сервиса и worker, но не заменяет тесты конкретных обязательных требований.
 - Go код форматировать через `gofmt`.
 - Для backend-логики использовать standard `testing`; для edge cases предпочитать table-driven tests.
-- Contract runner запускать против уже поднятого сервиса: `BASE_URL=http://localhost:8080 ./bin/avatar-contract-tests`.
-- Предпочтительная короткая команда для contract runner: `BASE_URL=http://localhost:8080 make contract-tests`.
+- Contract runner запускать против уже поднятого сервиса: `BASE_URL=http://localhost:18080 ./bin/avatar-contract-tests`.
+- Предпочтительная короткая команда для локального запуска: `make run-server` и `make contract-tests`.
+- Локальные Makefile/JetBrains defaults используют `HTTP_ADDR=:18080` и `BASE_URL=http://localhost:18080`, чтобы не занимать compose-порт `8080`.
 - Не добавлять `pkg/`, если нет реального reusable public API.
 - Не коммитить `.env`, загруженные аватары, бинарники из `bin/` и секреты.

@@ -1,3 +1,8 @@
+LOCAL_HTTP_ADDR ?= :18080
+LOCAL_BASE_URL ?= http://localhost:18080
+HTTP_ADDR ?= $(LOCAL_HTTP_ADDR)
+BASE_URL ?= $(LOCAL_BASE_URL)
+
 .PHONY: test build build-server build-worker build-contract-tests contract-tests run-server run-worker migrate-up migrate-down migrate-status
 
 test:
@@ -16,11 +21,11 @@ build-contract-tests:
 	go build -o ./bin/avatar-contract-tests ./cmd/avatar-contract-tests
 
 contract-tests: build-contract-tests
-	@test -n "$(BASE_URL)" || (echo "BASE_URL is required, example: BASE_URL=http://localhost:8080 make contract-tests" >&2; exit 2)
+	@test -n "$(BASE_URL)" || (echo "BASE_URL is required, example: BASE_URL=http://localhost:18080 make contract-tests" >&2; exit 2)
 	./bin/avatar-contract-tests -base-url "$(BASE_URL)"
 
 run-server:
-	go run ./cmd/avatars-service server
+	HTTP_ADDR="$(HTTP_ADDR)" go run ./cmd/avatars-service server
 
 run-worker:
 	go run ./cmd/avatars-service worker

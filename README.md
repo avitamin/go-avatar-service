@@ -116,23 +116,29 @@ make build-worker
 make build-contract-tests
 make run-server
 make run-worker
+make contract-tests
 make migrate-up
 make migrate-down
 make migrate-status
 ```
 
+Makefile настроен под локальную разработку:
+
+- `make run-server` использует `HTTP_ADDR=:18080` по умолчанию.
+- `make contract-tests` использует `BASE_URL=http://localhost:18080` по умолчанию.
+
+Значения можно переопределить:
+
+```bash
+make run-server HTTP_ADDR=:18081
+make contract-tests BASE_URL=http://localhost:18081
+```
+
 Contract smoke runner запускается против уже поднятого сервиса:
 
 ```bash
-go run ./cmd/avatars-service server
-BASE_URL=http://localhost:8080 go run ./cmd/avatar-contract-tests
-```
-
-Или через Makefile:
-
-```bash
-make build-contract-tests
-BASE_URL=http://localhost:8080 make contract-tests
+BASE_URL=http://localhost:18080 go run ./cmd/avatar-contract-tests
+BASE_URL=http://localhost:18080 make contract-tests
 ```
 
 Exit codes contract runner:
@@ -158,6 +164,19 @@ docker compose up --build
 ```
 
 На текущем этапе compose поднимает инфраструктуру и процессы, но runtime еще не подключает реальные PostgreSQL/MinIO/RabbitMQ adapters.
+
+Docker Compose публикует server на `http://localhost:8080`. Локальные Makefile/JetBrains конфигурации используют `http://localhost:18080`, чтобы не занимать стандартный compose-порт.
+
+## JetBrains Run Configurations
+
+В `.idea/runConfigurations/` сохранены shared конфигурации:
+
+- `Server` - запускает `cmd/avatars-service server` с `HTTP_ADDR=:18080`.
+- `Worker` - запускает `cmd/avatars-service worker`.
+- `Avatar Contract Tests` - запускает contract runner с `BASE_URL=http://localhost:18080`.
+- `Make Test` - выполняет `make test`.
+- `Make Build Contract Tests` - выполняет `make build-contract-tests`.
+- `Make Contract Tests` - выполняет `make contract-tests`; локальный `BASE_URL=http://localhost:18080` берется из Makefile.
 
 ## Проектная структура
 

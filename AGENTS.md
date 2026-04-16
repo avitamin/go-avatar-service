@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Это Go-модуль `go-avatar-service`. Точки входа сейчас находятся в `cmd/`: `cmd/server/main.go` запускает HTTP-сервер на `:8080`, `cmd/worker/main.go` запускает фоновый worker, а `cmd/avatar-contract-tests/main.go` собирает black-box runner контрактных smoke-тестов HTTP API. Веб-интерфейс сейчас представлен файлом `web/static/index.html`. По мере развития проекта держите приватную логику в `internal/` по структуре из актуальной спеки v1: `http/`, `service/`, `repository/`, `storage/`, `broker/`, `domain/`, `config/`, `worker/`. Публичный код кладите в `pkg/` только если он действительно рассчитан на переиспользование вне сервиса.
+Это Go-модуль `go-avatar-service`. Основная точка входа находится в `cmd/avatars-service` и поддерживает subcommands `server`, `worker`, `migrate`. Старые `cmd/server` и `cmd/worker` оставлены как thin compatibility wrappers. `cmd/avatar-contract-tests/main.go` собирает black-box runner контрактных smoke-тестов HTTP API. Веб-интерфейс представлен файлом `web/static/index.html`. Приватную логику держите в `internal/` по структуре из актуальной спеки v1: `http/`, `service/`, `repository/`, `storage/`, `broker/`, `domain/`, `config/`, `worker`. Публичный код кладите в `pkg/` только если он действительно рассчитан на переиспользование вне сервиса.
 
 ## AI Agent Prompts
 
@@ -13,19 +13,23 @@
 ## Build, Test, and Development Commands
 
 - `go mod tidy`: синхронизирует зависимости модуля.
-- `go run ./cmd/server`: запускает локальный HTTP-сервер.
-- `go run ./cmd/worker`: запускает worker-процесс.
+- `go run ./cmd/avatars-service server`: запускает локальный HTTP-сервер.
+- `go run ./cmd/avatars-service worker`: запускает worker-процесс.
+- `go run ./cmd/avatars-service migrate up|down|status`: запускает явный migration lifecycle.
 - `go build -o ./bin/server ./cmd/server`: собирает бинарник сервера.
 - `go build -o ./bin/worker ./cmd/worker`: собирает бинарник worker.
+- `go build -o ./bin/avatars-service ./cmd/avatars-service`: собирает основной single binary.
 - `go build -o ./bin/avatar-contract-tests ./cmd/avatar-contract-tests`: собирает black-box бинарник контрактных автотестов.
-- `BASE_URL=http://localhost:8080 ./bin/avatar-contract-tests`: запускает contract smoke tests против уже поднятого сервиса.
-- `make test`, `make build-server`, `make build-worker`, `make build-contract-tests`: короткие Makefile-цели для базовых команд.
-- `BASE_URL=http://localhost:8080 make contract-tests`: собирает и запускает contract smoke runner.
+- `BASE_URL=http://localhost:18080 ./bin/avatar-contract-tests`: запускает contract smoke tests против локального сервиса на незанятом базовом URL.
+- `make test`, `make build`, `make build-server`, `make build-worker`, `make build-contract-tests`: короткие Makefile-цели для базовых команд.
+- `make run-server`: запускает server с локальным default `HTTP_ADDR=:18080`.
+- `make contract-tests`: собирает и запускает contract smoke runner с локальным default `BASE_URL=http://localhost:18080`.
+- `BASE_URL=http://localhost:8080 make contract-tests`: запускает contract smoke runner против явно указанного сервиса, например compose-порта.
 - `go test ./...`: запускает все Go-тесты, включая self-tests contract runner'а.
 
-В `.idea/runConfigurations/` сохранены shared JetBrains конфигурации: `Server`, `Worker`, `Avatar Contract Tests`, `Make Test`, `Make Build Contract Tests`, `Make Contract Tests`.
+В `.idea/runConfigurations/` сохранены shared JetBrains конфигурации: `Server`, `Worker`, `Avatar Contract Tests`, `Make Test`, `Make Build Contract Tests`, `Make Contract Tests`. JetBrains конфигурации считаются локальными и используют `http://localhost:18080`, чтобы не занимать compose-порт `8080`.
 
-Docker Compose упомянут в README как будущий сценарий, но compose-файла сейчас нет. Не опирайтесь на него, пока конфигурация не появится в репозитории.
+Docker Compose присутствует и публикует server на `http://localhost:8080`. Runtime adapters PostgreSQL/MinIO/RabbitMQ еще не подключены к bootstrap, поэтому текущий server/worker используют in-memory core.
 
 ## Coding Style & Naming Conventions
 

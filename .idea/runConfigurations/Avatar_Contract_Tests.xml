@@ -3,7 +3,7 @@
     <module name="avatar-service" />
     <working_directory value="$PROJECT_DIR$" />
     <envs>
-      <env name="BASE_URL" value="http://localhost:8080" />
+      <env name="BASE_URL" value="http://localhost:18080" />
     </envs>
     <kind value="PACKAGE" />
     <package value="go-avatar-service/cmd/avatar-contract-tests" />

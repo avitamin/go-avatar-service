@@ -150,6 +150,7 @@ make build-worker
 make build-contract-tests
 make run-server
 make run-worker
+make contract-tests
 make migrate-up
 make migrate-down
 make migrate-status
@@ -158,15 +159,26 @@ make migrate-status
 Contract runner:
 
 ```bash
-BASE_URL=http://localhost:8080 go run ./cmd/avatar-contract-tests
-BASE_URL=http://localhost:8080 make contract-tests
+BASE_URL=http://localhost:18080 go run ./cmd/avatar-contract-tests
+BASE_URL=http://localhost:18080 make contract-tests
 ```
+
+Local Makefile defaults:
+
+- `LOCAL_HTTP_ADDR=:18080`
+- `LOCAL_BASE_URL=http://localhost:18080`
+- `HTTP_ADDR ?= $(LOCAL_HTTP_ADDR)`
+- `BASE_URL ?= $(LOCAL_BASE_URL)`
+
+JetBrains shared run configurations use `cmd/avatars-service` and `http://localhost:18080` for local server/contract runs.
 
 Docker Compose:
 
 ```bash
 docker compose up --build
 ```
+
+Docker Compose publishes the server on `http://localhost:8080`; local Makefile and JetBrains configs use `http://localhost:18080` to avoid that port.
 
 ## Development Rules
 
