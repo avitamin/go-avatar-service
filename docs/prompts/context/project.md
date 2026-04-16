@@ -25,8 +25,8 @@
 - `Dockerfile` и `docker-compose.yml` - локальная MVP-инфраструктура.
 - `web/static/index.html` - готовый upload UI, multipart поле `file`.
 - `tests/contract/` - автотестовый runner endpoints и self-tests через `httptest`.
-- `Makefile` - цели для сборки, `go test`, run/migrate и contract smoke runner.
-- `.idea/runConfigurations/` - shared JetBrains run configurations для `cmd/avatars-service`, Makefile-целей и локального `http://localhost:18080`.
+- `Makefile` - цели для сборки, `go test`, run/migrate, contract smoke runner и Docker Compose workflow.
+- `.idea/runConfigurations/` - shared JetBrains run configurations для `cmd/avatars-service`, Makefile-целей и Docker Compose workflow.
 - `go.mod` объявляет модуль `go-avatar-service` и зависимость `github.com/go-chi/chi/v5`.
 
 Текущие runtime gaps:
@@ -64,7 +64,7 @@
 - Для backend-логики использовать standard `testing`; для edge cases предпочитать table-driven tests.
 - Contract runner запускать против уже поднятого сервиса: `BASE_URL=http://localhost:18080 ./bin/avatar-contract-tests`.
 - Предпочтительная короткая команда для локального запуска: `make run-server` и `make contract-tests`.
-- Локальные Makefile/JetBrains defaults используют `HTTP_ADDR=:18080` и `BASE_URL=http://localhost:18080`, чтобы не занимать compose-порт `8080`.
+- Локальные Makefile/JetBrains server и contract defaults используют `HTTP_ADDR=:18080` и `BASE_URL=http://localhost:18080`, чтобы не занимать compose-порт `8080`; Docker Compose targets и configs используют `http://localhost:8080`.
 - Не добавлять `pkg/`, если нет реального reusable public API.
 - Не коммитить `.env`, загруженные аватары, бинарники из `bin/` и секреты.
 

@@ -120,6 +120,13 @@ make contract-tests
 make migrate-up
 make migrate-down
 make migrate-status
+make docker-build
+make docker-up-build
+make docker-up-detached
+make docker-down
+make docker-ps
+make docker-logs
+make docker-contract-tests
 ```
 
 Makefile настроен под локальную разработку:
@@ -177,6 +184,13 @@ Docker Compose публикует server на `http://localhost:8080`. Лока�
 - `Make Test` - выполняет `make test`.
 - `Make Build Contract Tests` - выполняет `make build-contract-tests`.
 - `Make Contract Tests` - выполняет `make contract-tests`; локальный `BASE_URL=http://localhost:18080` берется из Makefile.
+- `Make Docker Build` - выполняет `make docker-build`.
+- `Make Docker Up Build` - выполняет `make docker-up-build`.
+- `Make Docker Up Detached` - выполняет `make docker-up-detached`.
+- `Make Docker Down` - выполняет `make docker-down`.
+- `Make Docker Ps` - выполняет `make docker-ps`.
+- `Make Docker Logs` - выполняет `make docker-logs`.
+- `Make Docker Contract Tests` - выполняет `make docker-contract-tests` против compose-порта `http://localhost:8080`.
 
 ## Проектная структура
 

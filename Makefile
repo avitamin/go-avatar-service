@@ -2,8 +2,11 @@ LOCAL_HTTP_ADDR ?= :18080
 LOCAL_BASE_URL ?= http://localhost:18080
 HTTP_ADDR ?= $(LOCAL_HTTP_ADDR)
 BASE_URL ?= $(LOCAL_BASE_URL)
+COMPOSE ?= docker compose
+COMPOSE_FILE ?= docker-compose.yml
+COMPOSE_BASE_URL ?= http://localhost:8080
 
-.PHONY: test build build-server build-worker build-contract-tests contract-tests run-server run-worker migrate-up migrate-down migrate-status
+.PHONY: test build build-server build-worker build-contract-tests contract-tests run-server run-worker migrate-up migrate-down migrate-status docker-build docker-up docker-up-build docker-up-detached docker-down docker-down-volumes docker-ps docker-logs docker-contract-tests
 
 test:
 	go test ./...
@@ -38,3 +41,30 @@ migrate-down:
 
 migrate-status:
 	go run ./cmd/avatars-service migrate status
+
+docker-build:
+	$(COMPOSE) -f $(COMPOSE_FILE) build
+
+docker-up:
+	$(COMPOSE) -f $(COMPOSE_FILE) up
+
+docker-up-build:
+	$(COMPOSE) -f $(COMPOSE_FILE) up --build
+
+docker-up-detached:
+	$(COMPOSE) -f $(COMPOSE_FILE) up -d --build
+
+docker-down:
+	$(COMPOSE) -f $(COMPOSE_FILE) down
+
+docker-down-volumes:
+	$(COMPOSE) -f $(COMPOSE_FILE) down -v --remove-orphans
+
+docker-ps:
+	$(COMPOSE) -f $(COMPOSE_FILE) ps
+
+docker-logs:
+	$(COMPOSE) -f $(COMPOSE_FILE) logs -f
+
+docker-contract-tests: build-contract-tests
+	$(MAKE) contract-tests BASE_URL="$(COMPOSE_BASE_URL)"

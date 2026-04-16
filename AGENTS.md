@@ -25,9 +25,10 @@
 - `make run-server`: запускает server с локальным default `HTTP_ADDR=:18080`.
 - `make contract-tests`: собирает и запускает contract smoke runner с локальным default `BASE_URL=http://localhost:18080`.
 - `BASE_URL=http://localhost:8080 make contract-tests`: запускает contract smoke runner против явно указанного сервиса, например compose-порта.
+- `make docker-build`, `make docker-up-build`, `make docker-up-detached`, `make docker-down`, `make docker-ps`, `make docker-logs`, `make docker-contract-tests`: Makefile-цели для Docker Compose workflow.
 - `go test ./...`: запускает все Go-тесты, включая self-tests contract runner'а.
 
-В `.idea/runConfigurations/` сохранены shared JetBrains конфигурации: `Server`, `Worker`, `Avatar Contract Tests`, `Make Test`, `Make Build Contract Tests`, `Make Contract Tests`. JetBrains конфигурации считаются локальными и используют `http://localhost:18080`, чтобы не занимать compose-порт `8080`.
+В `.idea/runConfigurations/` сохранены shared JetBrains конфигурации: `Server`, `Worker`, `Avatar Contract Tests`, `Make Test`, `Make Build Contract Tests`, `Make Contract Tests`, `Make Docker Build`, `Make Docker Up Build`, `Make Docker Up Detached`, `Make Docker Down`, `Make Docker Ps`, `Make Docker Logs`, `Make Docker Contract Tests`. Локальные server/contract конфигурации используют `http://localhost:18080`, Docker Compose конфигурации используют compose-порт `http://localhost:8080`.
 
 Docker Compose присутствует и публикует server на `http://localhost:8080`. Runtime adapters PostgreSQL/MinIO/RabbitMQ еще не подключены к bootstrap, поэтому текущий server/worker используют in-memory core.
 
