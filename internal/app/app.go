@@ -23,6 +23,19 @@ import (
 )
 
 const healthCheckTimeout = 500 * time.Millisecond
+const serverShutdownTimeout = 5 * time.Second
+
+var signalContextFn = signalContext
+var runServerFn = RunServer
+var runWorkerFn = RunWorker
+var newHTTPServer = func(addr string, handler http.Handler) httpServer {
+	return &stdHTTPServer{
+		server: &http.Server{
+			Addr:    addr,
+			Handler: handler,
+		},
+	}
+}
 
 func Run(args []string, out io.Writer) error {
 	if len(args) < 2 {
@@ -37,15 +50,17 @@ func Run(args []string, out io.Writer) error {
 			_, _ = fmt.Fprintln(out, "server ok")
 			return nil
 		}
-		return RunServer(context.Background())
+		ctx, stop := signalContextFn()
+		defer stop()
+		return runServerFn(ctx)
 	case "worker":
 		if hasCheck(args) {
 			_, _ = fmt.Fprintln(out, "worker ok")
 			return nil
 		}
-		ctx, stop := signalContext()
+		ctx, stop := signalContextFn()
 		defer stop()
-		return RunWorker(ctx, out)
+		return runWorkerFn(ctx, out)
 	case "migrate":
 		if len(args) < 3 {
 			return errors.New("migrate subcommand is required")
@@ -82,17 +97,22 @@ func RunServer(ctx context.Context) error {
 	defer brokerRuntime.close()
 	svc := service.NewAvatarService(storeRuntime.repo, storeRuntime.storage, brokerRuntime.broker)
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	server := &http.Server{
-		Addr:    addr,
-		Handler: httpapi.NewRouter(svc, newServerHealthService(logger, storeRuntime, brokerRuntime)),
-	}
+	server := newHTTPServer(addr, httpapi.NewRouter(svc, newServerHealthService(logger, storeRuntime, brokerRuntime)))
+	shutdownErrCh := make(chan error, 1)
 	go func() {
 		<-ctx.Done()
-		_ = server.Close()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
+		defer cancel()
+		shutdownErrCh <- server.Shutdown(shutdownCtx)
 	}()
 	log.Printf("starting avatars-service server on %s", addr)
 	err = server.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {
+		select {
+		case shutdownErr := <-shutdownErrCh:
+			return shutdownErr
+		default:
+		}
 		return nil
 	}
 	return err
@@ -248,4 +268,21 @@ func minioConfigFromEnv() (miniostore.Config, bool, error) {
 
 func signalContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+}
+
+type httpServer interface {
+	ListenAndServe() error
+	Shutdown(context.Context) error
+}
+
+type stdHTTPServer struct {
+	server *http.Server
+}
+
+func (s *stdHTTPServer) ListenAndServe() error {
+	return s.server.ListenAndServe()
+}
+
+func (s *stdHTTPServer) Shutdown(ctx context.Context) error {
+	return s.server.Shutdown(ctx)
 }
