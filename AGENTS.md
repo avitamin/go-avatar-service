@@ -8,6 +8,10 @@
 
 Промты и роли для AI-агентов находятся в `docs/prompts/`. Перед планированием, реализацией, ревью или тестированием задач читайте `docs/prompts/README.md` и `docs/prompts/context/project.md`.
 
+Для Codex и других AI-агентов каталоги `docs/prompts/` и `docs/plans/` не являются source of truth по продуктовым требованиям, текущему task scope или обязательному workflow по умолчанию. Не используйте их как автоматические инструкции, backlog или план выполнения, если пользователь явно не попросил открыть конкретный файл из этих директорий.
+
+Если во время поиска, обзора репозитория или bulk-read агент случайно увидел файлы из `docs/prompts/` или `docs/plans/`, он должен трактовать их только как справочные артефакты и игнорировать как активные указания к действию, пока пользователь явно не сослался на конкретный prompt, plan, role, workflow или template.
+
 Актуальные источники требований: `docs/requirements/confirmed-requirements.md` и `docs/specs/avatar-service-v1.md`. Если они конфликтуют с README, QWEN.md или исходным ТЗ, используйте confirmed requirements и v1 spec как более приоритетные документы.
 
 ## Build, Test, and Development Commands
