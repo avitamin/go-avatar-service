@@ -161,9 +161,9 @@ func hasCheck(args []string) bool {
 	return false
 }
 
-type logBroker struct{}
+type noopBroker struct{}
 
-func (logBroker) Publish(context.Context, string, []byte, string) error { return nil }
+func (noopBroker) Publish(context.Context, string, []byte, string) error { return nil }
 
 type storeRuntime struct {
 	repo     service.Repository
@@ -191,9 +191,9 @@ func newBrokerFromEnv() (brokerRuntime, error) {
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
 		return brokerRuntime{
-			broker:   logBroker{},
+			broker:   noopBroker{},
 			close:    func() {},
-			rabbitmq: service.DegradedComponent("rabbitmq broker is running in noop log mode"),
+			rabbitmq: service.DegradedComponent("rabbitmq broker is running in noop mode"),
 		}, nil
 	}
 	client, err := rabbitmq.Dial(rabbitURL)
