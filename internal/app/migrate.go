@@ -22,6 +22,7 @@ type migrationRunner struct {
 	migrator *migrate.Migrate
 }
 
+// RunMigrate executes migration commands against PostgreSQL.
 func RunMigrate(ctx context.Context, direction string, out io.Writer) error {
 	if out == nil {
 		out = io.Discard

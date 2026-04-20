@@ -1,3 +1,4 @@
+// Package rabbitmq provides a RabbitMQ-backed broker client and consumer.
 package rabbitmq
 
 import (
@@ -16,6 +17,7 @@ const (
 	deleteQueue     = "avatars.deletes"
 )
 
+// Client publishes and consumes avatar worker events through RabbitMQ.
 type Client struct {
 	conn     *amqp.Connection
 	ch       *amqp.Channel
@@ -23,6 +25,7 @@ type Client struct {
 	once     sync.Once
 }
 
+// Dial connects to RabbitMQ and declares the required topology.
 func Dial(url string) (*Client, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
@@ -41,6 +44,7 @@ func Dial(url string) (*Client, error) {
 	return c, nil
 }
 
+// Publish sends a durable message to the configured exchange.
 func (c *Client) Publish(ctx context.Context, topic string, msg []byte, messageID string) error {
 	if c == nil || c.ch == nil {
 		return errors.New("rabbitmq client is closed")
@@ -54,6 +58,7 @@ func (c *Client) Publish(ctx context.Context, topic string, msg []byte, messageI
 	})
 }
 
+// HealthCheck verifies that the exchange is reachable.
 func (c *Client) HealthCheck(ctx context.Context) error {
 	if c == nil || c.conn == nil {
 		return errors.New("rabbitmq client is closed")
@@ -69,6 +74,7 @@ func (c *Client) HealthCheck(ctx context.Context) error {
 	return ch.ExchangeDeclarePassive(c.exchange, "topic", true, false, false, false, nil)
 }
 
+// Consume merges upload and delete queues into a single delivery stream.
 func (c *Client) Consume(ctx context.Context) (<-chan worker.Delivery, error) {
 	if c == nil || c.ch == nil {
 		return nil, errors.New("rabbitmq client is closed")
@@ -108,6 +114,7 @@ func (c *Client) Consume(ctx context.Context) (<-chan worker.Delivery, error) {
 	return out, nil
 }
 
+// Close releases the AMQP channel and connection once.
 func (c *Client) Close() error {
 	var err error
 	c.once.Do(func() {

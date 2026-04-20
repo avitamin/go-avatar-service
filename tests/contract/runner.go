@@ -1,3 +1,4 @@
+// Package contract provides black-box HTTP smoke tests for the avatar API.
 package contract
 
 import (
@@ -12,10 +13,13 @@ import (
 )
 
 const (
+	// DefaultTimeout is the fallback timeout used by the contract runner.
 	DefaultTimeout = 30 * time.Second
-	DefaultUserID  = "contract-user"
+	// DefaultUserID is the default base user identifier used in scenarios.
+	DefaultUserID = "contract-user"
 )
 
+// Config configures the contract runner.
 type Config struct {
 	BaseURL string
 	Timeout time.Duration
@@ -25,6 +29,7 @@ type Config struct {
 	Client  *http.Client
 }
 
+// Runner executes HTTP smoke scenarios against a running service.
 type Runner struct {
 	baseURL string
 	timeout time.Duration
@@ -39,11 +44,13 @@ type state struct {
 	AvatarID string
 }
 
+// Scenario describes one black-box contract check.
 type Scenario struct {
 	Name string
 	Run  func(context.Context, *Runner) error
 }
 
+// Result captures the outcome of a single scenario run.
 type Result struct {
 	Name     string
 	Passed   bool
@@ -51,10 +58,12 @@ type Result struct {
 	Err      error
 }
 
+// Report aggregates all scenario results.
 type Report struct {
 	Results []Result
 }
 
+// NewRunner validates Config and creates a Runner.
 func NewRunner(cfg Config) (*Runner, error) {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = os.Getenv("BASE_URL")
@@ -97,6 +106,7 @@ func NewRunner(cfg Config) (*Runner, error) {
 	}, nil
 }
 
+// DefaultScenarios returns the standard smoke test suite for the HTTP API.
 func DefaultScenarios() []Scenario {
 	return []Scenario{
 		{Name: "health", Run: scenarioHealth},
@@ -121,6 +131,7 @@ func DefaultScenarios() []Scenario {
 	}
 }
 
+// Run executes scenarios and prints progress to the configured writer.
 func (r *Runner) Run(ctx context.Context, scenarios []Scenario) Report {
 	if len(scenarios) == 0 {
 		scenarios = DefaultScenarios()
@@ -143,6 +154,7 @@ func (r *Runner) Run(ctx context.Context, scenarios []Scenario) Report {
 	return report
 }
 
+// URL joins path with the configured service base URL.
 func (r *Runner) URL(path string) string {
 	if path == "" || path[0] != '/' {
 		path = "/" + path
@@ -150,6 +162,7 @@ func (r *Runner) URL(path string) string {
 	return r.baseURL + path
 }
 
+// UserID returns the configured base user ID with an optional suffix.
 func (r *Runner) UserID(suffix string) string {
 	base := strings.TrimSpace(r.userID)
 	if suffix == "" {
@@ -177,6 +190,7 @@ func (r *Runner) printResult(result Result) {
 	fmt.Fprintf(r.out, "%s %s (%s)\n", status, result.Name, result.Duration.Round(time.Millisecond))
 }
 
+// Failed returns the number of failed scenario results.
 func (r Report) Failed() int {
 	failed := 0
 	for _, result := range r.Results {
@@ -187,6 +201,7 @@ func (r Report) Failed() int {
 	return failed
 }
 
+// Passed returns the number of successful scenario results.
 func (r Report) Passed() int {
 	return len(r.Results) - r.Failed()
 }

@@ -8,36 +8,44 @@ import (
 )
 
 const (
-	HealthStatusOK       = "ok"
+	// HealthStatusOK marks a healthy dependency or aggregate runtime status.
+	HealthStatusOK = "ok"
+	// HealthStatusDegraded marks a missing or failing dependency.
 	HealthStatusDegraded = "degraded"
 )
 
+// ComponentProbe describes how to check a runtime dependency.
 type ComponentProbe struct {
 	Check          func(context.Context) error
 	DegradedReason string
 }
 
+// RuntimeProbes groups the dependency checks reported by /health.
 type RuntimeProbes struct {
 	Postgres ComponentProbe
 	Minio    ComponentProbe
 	RabbitMQ ComponentProbe
 }
 
+// HealthSnapshot is the JSON payload returned by the health endpoint.
 type HealthSnapshot struct {
 	Status     string            `json:"status"`
 	Components map[string]string `json:"components"`
 }
 
+// RuntimeHealthChecker returns a snapshot of current dependency health.
 type RuntimeHealthChecker interface {
 	Check(context.Context) HealthSnapshot
 }
 
+// RuntimeHealthService evaluates runtime dependency probes with a timeout.
 type RuntimeHealthService struct {
 	logger  *slog.Logger
 	timeout time.Duration
 	probes  RuntimeProbes
 }
 
+// NewRuntimeHealthService builds a RuntimeHealthService from configured probes.
 func NewRuntimeHealthService(logger *slog.Logger, timeout time.Duration, probes RuntimeProbes) *RuntimeHealthService {
 	if logger == nil {
 		logger = slog.Default()
@@ -52,14 +60,17 @@ func NewRuntimeHealthService(logger *slog.Logger, timeout time.Duration, probes 
 	}
 }
 
+// DegradedComponent returns a probe that is always reported as degraded.
 func DegradedComponent(reason string) ComponentProbe {
 	return ComponentProbe{DegradedReason: reason}
 }
 
+// HealthyComponent wraps a dependency health-check function into a probe.
 func HealthyComponent(check func(context.Context) error) ComponentProbe {
 	return ComponentProbe{Check: check}
 }
 
+// Check runs all configured probes and returns the aggregate health snapshot.
 func (s *RuntimeHealthService) Check(ctx context.Context) HealthSnapshot {
 	components := map[string]string{
 		"postgres": s.checkComponent(ctx, "postgres", s.probes.Postgres),

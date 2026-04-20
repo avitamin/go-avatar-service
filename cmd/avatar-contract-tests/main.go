@@ -1,3 +1,4 @@
+// Package main provides the black-box HTTP contract test runner CLI.
 package main
 
 import (

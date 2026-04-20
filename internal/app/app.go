@@ -1,3 +1,4 @@
+// Package app wires CLI commands to the service runtime.
 package app
 
 import (
@@ -37,6 +38,7 @@ var newHTTPServer = func(addr string, handler http.Handler) httpServer {
 	}
 }
 
+// Run executes the avatars-service CLI subcommands.
 func Run(args []string, out io.Writer) error {
 	if len(args) < 2 {
 		return usage(out)
@@ -80,6 +82,7 @@ func Run(args []string, out io.Writer) error {
 	}
 }
 
+// RunServer starts the HTTP server using environment-driven runtime adapters.
 func RunServer(ctx context.Context) error {
 	addr := os.Getenv("HTTP_ADDR")
 	if addr == "" {
@@ -118,6 +121,7 @@ func RunServer(ctx context.Context) error {
 	return err
 }
 
+// RunWorker starts the worker process using environment-driven runtime adapters.
 func RunWorker(ctx context.Context, out io.Writer) error {
 	if out == nil {
 		out = io.Discard

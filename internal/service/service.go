@@ -1,3 +1,4 @@
+// Package service implements application services and in-memory test adapters.
 package service
 
 import (
@@ -16,12 +17,17 @@ import (
 )
 
 var (
-	ErrNotFound        = errors.New("not found")
-	ErrForbidden       = errors.New("forbidden")
+	// ErrNotFound reports a missing avatar or metadata record.
+	ErrNotFound = errors.New("not found")
+	// ErrForbidden reports an ownership or access violation.
+	ErrForbidden = errors.New("forbidden")
+	// ErrVariantNotReady reports a requested variant that is not available yet.
 	ErrVariantNotReady = errors.New("variant not ready")
-	ErrObjectNotFound  = errors.New("object not found")
+	// ErrObjectNotFound reports a missing stored object.
+	ErrObjectNotFound = errors.New("object not found")
 )
 
+// UploadInput contains the data required to create a new avatar.
 type UploadInput struct {
 	UserID      string
 	FileName    string
@@ -29,6 +35,7 @@ type UploadInput struct {
 	ContentType string
 }
 
+// AvatarDTO is the API-facing avatar representation returned by services.
 type AvatarDTO struct {
 	ID         string        `json:"id"`
 	UserID     string        `json:"user_id"`
@@ -38,10 +45,12 @@ type AvatarDTO struct {
 	Thumbnails []string      `json:"thumbnails,omitempty"`
 }
 
+// Broker publishes asynchronous avatar events.
 type Broker interface {
 	Publish(ctx context.Context, topic string, msg []byte, messageID string) error
 }
 
+// Repository persists avatar metadata.
 type Repository interface {
 	Create(context.Context, *domain.Avatar) error
 	GetActiveByID(context.Context, string) (*domain.Avatar, error)
@@ -52,6 +61,7 @@ type Repository interface {
 	UpdateProcessingResult(context.Context, string, string, string) error
 }
 
+// Storage stores avatar objects and generated variants.
 type Storage interface {
 	Put(context.Context, string, []byte, string) error
 	Get(context.Context, string) ([]byte, string, error)
@@ -59,6 +69,7 @@ type Storage interface {
 	Exists(context.Context, string) bool
 }
 
+// AvatarService coordinates avatar uploads, reads, and deletes.
 type AvatarService struct {
 	repo    Repository
 	storage Storage
@@ -67,6 +78,7 @@ type AvatarService struct {
 	nextID  func() string
 }
 
+// NewAvatarService creates an AvatarService with the provided ports.
 func NewAvatarService(repo Repository, storage Storage, broker Broker) *AvatarService {
 	var mu sync.Mutex
 	seq := 0
@@ -96,6 +108,7 @@ func randomAvatarID() (string, error) {
 	return "avatar-" + hex.EncodeToString(b[:]), nil
 }
 
+// Upload stores the original image, creates metadata, and emits a worker event.
 func (s *AvatarService) Upload(ctx context.Context, in UploadInput) (AvatarDTO, error) {
 	if err := domain.ValidateUserID(in.UserID); err != nil {
 		return AvatarDTO{}, err
@@ -131,6 +144,7 @@ func (s *AvatarService) Upload(ctx context.Context, in UploadInput) (AvatarDTO, 
 	return dto(*a), nil
 }
 
+// ReadAvatar returns the bytes and MIME type for a specific avatar variant.
 func (s *AvatarService) ReadAvatar(ctx context.Context, id string, size domain.Size) ([]byte, string, error) {
 	a, err := s.repo.GetActiveByID(ctx, id)
 	if err != nil {
@@ -147,6 +161,7 @@ func (s *AvatarService) ReadAvatar(ctx context.Context, id string, size domain.S
 	return data, mime, err
 }
 
+// Metadata returns API metadata for a single avatar.
 func (s *AvatarService) Metadata(ctx context.Context, id string) (AvatarDTO, error) {
 	a, err := s.repo.GetActiveByID(ctx, id)
 	if err != nil {
@@ -165,6 +180,7 @@ func (s *AvatarService) Metadata(ctx context.Context, id string) (AvatarDTO, err
 	return out, nil
 }
 
+// ListByUser returns active avatars for a user ordered by creation time.
 func (s *AvatarService) ListByUser(ctx context.Context, userID string) ([]AvatarDTO, error) {
 	if err := domain.ValidateUserID(userID); err != nil {
 		return nil, err
@@ -180,6 +196,7 @@ func (s *AvatarService) ListByUser(ctx context.Context, userID string) ([]Avatar
 	return out, nil
 }
 
+// ReadUserAvatar returns the newest available avatar variant for a user.
 func (s *AvatarService) ReadUserAvatar(ctx context.Context, userID string, size domain.Size) ([]byte, AvatarDTO, error) {
 	if err := domain.ValidateUserID(userID); err != nil {
 		return nil, AvatarDTO{}, err
@@ -204,6 +221,7 @@ func (s *AvatarService) ReadUserAvatar(ctx context.Context, userID string, size 
 	return nil, AvatarDTO{}, ErrNotFound
 }
 
+// DeleteByID soft-deletes an avatar owned by owner and emits a delete event.
 func (s *AvatarService) DeleteByID(ctx context.Context, id, owner string) error {
 	if err := domain.ValidateUserID(owner); err != nil {
 		return err
@@ -224,6 +242,7 @@ func (s *AvatarService) DeleteByID(ctx context.Context, id, owner string) error 
 	return nil
 }
 
+// DeleteCurrentUserAvatar deletes the current user's latest available avatar.
 func (s *AvatarService) DeleteCurrentUserAvatar(ctx context.Context, pathUserID, owner string) error {
 	if err := domain.ValidateUserID(pathUserID); err != nil {
 		return err
@@ -246,6 +265,7 @@ func (s *AvatarService) DeleteCurrentUserAvatar(ctx context.Context, pathUserID,
 	return ErrNotFound
 }
 
+// GalleryByUser returns avatar cards for the web gallery and whether the user exists.
 func (s *AvatarService) GalleryByUser(ctx context.Context, userID string) ([]AvatarDTO, bool, error) {
 	items, err := s.repo.ListActiveByUser(ctx, userID)
 	if err != nil {
@@ -287,15 +307,18 @@ func extForMime(mime string) string {
 	}
 }
 
+// MemoryRepository is an in-memory Repository implementation for tests and fallback mode.
 type MemoryRepository struct {
 	mu      sync.RWMutex
 	avatars map[string]domain.Avatar
 }
 
+// NewMemoryRepository creates an empty in-memory avatar repository.
 func NewMemoryRepository() *MemoryRepository {
 	return &MemoryRepository{avatars: map[string]domain.Avatar{}}
 }
 
+// Create stores avatar metadata in memory.
 func (r *MemoryRepository) Create(_ context.Context, a *domain.Avatar) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -303,6 +326,7 @@ func (r *MemoryRepository) Create(_ context.Context, a *domain.Avatar) error {
 	return nil
 }
 
+// GetActiveByID returns an active avatar by identifier.
 func (r *MemoryRepository) GetActiveByID(ctx context.Context, id string) (*domain.Avatar, error) {
 	a, err := r.GetByID(ctx, id)
 	if err != nil {
@@ -314,6 +338,7 @@ func (r *MemoryRepository) GetActiveByID(ctx context.Context, id string) (*domai
 	return a, nil
 }
 
+// GetByID returns an avatar by identifier, including soft-deleted records.
 func (r *MemoryRepository) GetByID(_ context.Context, id string) (*domain.Avatar, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -324,6 +349,7 @@ func (r *MemoryRepository) GetByID(_ context.Context, id string) (*domain.Avatar
 	return &a, nil
 }
 
+// ListActiveByUser lists active avatars for a user in reverse creation order.
 func (r *MemoryRepository) ListActiveByUser(_ context.Context, userID string) ([]domain.Avatar, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -339,6 +365,7 @@ func (r *MemoryRepository) ListActiveByUser(_ context.Context, userID string) ([
 	return out, nil
 }
 
+// SoftDeleteByID marks an avatar deleted without removing its metadata row.
 func (r *MemoryRepository) SoftDeleteByID(_ context.Context, id string, deletedAt time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -352,6 +379,7 @@ func (r *MemoryRepository) SoftDeleteByID(_ context.Context, id string, deletedA
 	return nil
 }
 
+// MarkPublishFailed marks an avatar as failed after event publication problems.
 func (r *MemoryRepository) MarkPublishFailed(_ context.Context, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -365,6 +393,7 @@ func (r *MemoryRepository) MarkPublishFailed(_ context.Context, id string) error
 	return nil
 }
 
+// UpdateProcessingResult stores generated thumbnail keys and completion status.
 func (r *MemoryRepository) UpdateProcessingResult(_ context.Context, id, thumb100, thumb300 string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -391,15 +420,18 @@ type object struct {
 	mime string
 }
 
+// MemoryStorage is an in-memory Storage implementation for tests and fallback mode.
 type MemoryStorage struct {
 	mu      sync.RWMutex
 	objects map[string]object
 }
 
+// NewMemoryStorage creates an empty in-memory object storage.
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{objects: map[string]object{}}
 }
 
+// Put stores object bytes under the provided key.
 func (s *MemoryStorage) Put(_ context.Context, key string, data []byte, mime string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -408,6 +440,7 @@ func (s *MemoryStorage) Put(_ context.Context, key string, data []byte, mime str
 	return nil
 }
 
+// Get returns object bytes and MIME type by key.
 func (s *MemoryStorage) Get(_ context.Context, key string) ([]byte, string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -418,6 +451,7 @@ func (s *MemoryStorage) Get(_ context.Context, key string) ([]byte, string, erro
 	return append([]byte(nil), obj.data...), obj.mime, nil
 }
 
+// Delete removes an object key from memory.
 func (s *MemoryStorage) Delete(_ context.Context, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -425,6 +459,7 @@ func (s *MemoryStorage) Delete(_ context.Context, key string) error {
 	return nil
 }
 
+// Exists reports whether the key is currently present in memory.
 func (s *MemoryStorage) Exists(_ context.Context, key string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

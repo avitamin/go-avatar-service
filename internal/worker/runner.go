@@ -1,3 +1,4 @@
+// Package worker processes avatar events from the broker.
 package worker
 
 import (
@@ -9,10 +10,13 @@ import (
 )
 
 const (
-	RoutingKeyUploaded        = "avatar.uploaded"
+	// RoutingKeyUploaded is emitted after the original avatar is stored.
+	RoutingKeyUploaded = "avatar.uploaded"
+	// RoutingKeyDeleteRequested is emitted after an avatar is soft-deleted.
 	RoutingKeyDeleteRequested = "avatar.delete_requested"
 )
 
+// Delivery represents one broker message passed to the worker.
 type Delivery struct {
 	RoutingKey string
 	Body       []byte
@@ -20,11 +24,13 @@ type Delivery struct {
 	Nack       func(requeue bool) error
 }
 
+// Consumer streams deliveries from the broker transport.
 type Consumer interface {
 	Consume(context.Context) (<-chan Delivery, error)
 	Close() error
 }
 
+// Runner dispatches broker deliveries to upload and delete handlers.
 type Runner struct {
 	consumer Consumer
 	upload   *UploadHandler
@@ -32,6 +38,7 @@ type Runner struct {
 	log      *slog.Logger
 }
 
+// NewRunner creates a Runner with the provided consumer and handlers.
 func NewRunner(consumer Consumer, upload *UploadHandler, delete *DeleteHandler, log *slog.Logger) *Runner {
 	if log == nil {
 		log = slog.Default()
@@ -39,6 +46,7 @@ func NewRunner(consumer Consumer, upload *UploadHandler, delete *DeleteHandler, 
 	return &Runner{consumer: consumer, upload: upload, delete: delete, log: log}
 }
 
+// Run consumes deliveries until the consumer closes or the context is canceled.
 func (r *Runner) Run(ctx context.Context) error {
 	if r.consumer == nil {
 		return errors.New("worker consumer is required")

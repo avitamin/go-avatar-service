@@ -1,3 +1,4 @@
+// Package main provides the legacy worker-only compatibility entrypoint.
 package main
 
 import (

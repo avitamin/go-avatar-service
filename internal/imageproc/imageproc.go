@@ -1,3 +1,4 @@
+// Package imageproc provides image sniffing, decoding, and thumbnail helpers.
 package imageproc
 
 import (
@@ -8,8 +9,10 @@ import (
 	"image/png"
 )
 
+// ErrUnsupportedImage reports bytes or formats unsupported by the service.
 var ErrUnsupportedImage = errors.New("unsupported image")
 
+// Sniff detects the MIME type from the beginning of the image bytes.
 func Sniff(data []byte) (string, error) {
 	if len(data) >= 3 && data[0] == 0xff && data[1] == 0xd8 && data[2] == 0xff {
 		return "image/jpeg", nil
@@ -23,6 +26,7 @@ func Sniff(data []byte) (string, error) {
 	return "", ErrUnsupportedImage
 }
 
+// Decode parses image bytes for the provided MIME type.
 func Decode(data []byte, mime string) (image.Image, error) {
 	switch mime {
 	case "image/jpeg":
@@ -34,6 +38,7 @@ func Decode(data []byte, mime string) (image.Image, error) {
 	}
 }
 
+// ThumbnailJPEG builds a square JPEG thumbnail with the requested side size.
 func ThumbnailJPEG(data []byte, size int) ([]byte, error) {
 	mime, err := Sniff(data)
 	if err != nil {

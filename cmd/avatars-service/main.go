@@ -1,3 +1,4 @@
+// Package main provides the primary avatars-service CLI entrypoint.
 package main
 
 import (

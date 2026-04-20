@@ -13,24 +13,29 @@ import (
 
 var errTemporary = errors.New("temporary")
 
+// UploadEvent requests thumbnail generation for an avatar.
 type UploadEvent struct {
 	AvatarID string `json:"avatar_id"`
 }
 
+// DeleteEvent requests removal of avatar objects from storage.
 type DeleteEvent struct {
 	AvatarID string `json:"avatar_id"`
 }
 
+// UploadHandler builds thumbnails for uploaded avatars.
 type UploadHandler struct {
 	repo    service.Repository
 	storage service.Storage
 	log     *slog.Logger
 }
 
+// NewUploadHandler creates an UploadHandler backed by repository and storage ports.
 func NewUploadHandler(repo service.Repository, storage service.Storage, log *slog.Logger) *UploadHandler {
 	return &UploadHandler{repo: repo, storage: storage, log: log}
 }
 
+// Handle processes an upload event and stores generated thumbnail variants.
 func (h *UploadHandler) Handle(ctx context.Context, event UploadEvent) error {
 	a, err := h.repo.GetActiveByID(ctx, event.AvatarID)
 	if err != nil {
@@ -80,16 +85,19 @@ func (h *UploadHandler) Handle(ctx context.Context, event UploadEvent) error {
 	return nil
 }
 
+// DeleteHandler removes avatar objects after a delete event.
 type DeleteHandler struct {
 	repo    service.Repository
 	storage service.Storage
 	log     *slog.Logger
 }
 
+// NewDeleteHandler creates a DeleteHandler backed by repository and storage ports.
 func NewDeleteHandler(repo service.Repository, storage service.Storage, log *slog.Logger) *DeleteHandler {
 	return &DeleteHandler{repo: repo, storage: storage, log: log}
 }
 
+// Handle processes a delete event and removes known object keys.
 func (h *DeleteHandler) Handle(ctx context.Context, event DeleteEvent) error {
 	a, err := h.repo.GetByID(ctx, event.AvatarID)
 	if err != nil {
@@ -108,6 +116,7 @@ func (h *DeleteHandler) Handle(ctx context.Context, event DeleteEvent) error {
 	return nil
 }
 
+// Retry reruns fn with a short linear backoff until success or context cancellation.
 func Retry(ctx context.Context, attempts int, fn func() error) error {
 	if attempts < 1 {
 		attempts = 1

@@ -1,3 +1,4 @@
+// Package postgres provides a PostgreSQL Repository implementation.
 package postgres
 
 import (
@@ -12,10 +13,12 @@ import (
 	"go-avatar-service/internal/service"
 )
 
+// Repository persists avatar metadata in PostgreSQL.
 type Repository struct {
 	db *sql.DB
 }
 
+// Open connects to PostgreSQL and returns a Repository.
 func Open(ctx context.Context, dsn string) (*Repository, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -28,14 +31,17 @@ func Open(ctx context.Context, dsn string) (*Repository, error) {
 	return &Repository{db: db}, nil
 }
 
+// Close releases the underlying database connection pool.
 func (r *Repository) Close() error {
 	return r.db.Close()
 }
 
+// HealthCheck verifies that PostgreSQL is reachable.
 func (r *Repository) HealthCheck(ctx context.Context) error {
 	return r.db.PingContext(ctx)
 }
 
+// Create inserts a new avatar metadata row.
 func (r *Repository) Create(ctx context.Context, a *domain.Avatar) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO avatars (
@@ -53,6 +59,7 @@ func (r *Repository) Create(ctx context.Context, a *domain.Avatar) error {
 	return err
 }
 
+// GetActiveByID returns a non-deleted avatar by identifier.
 func (r *Repository) GetActiveByID(ctx context.Context, id string) (*domain.Avatar, error) {
 	a, err := r.GetByID(ctx, id)
 	if err != nil {
@@ -64,10 +71,12 @@ func (r *Repository) GetActiveByID(ctx context.Context, id string) (*domain.Avat
 	return a, nil
 }
 
+// GetByID returns an avatar by identifier, including soft-deleted rows.
 func (r *Repository) GetByID(ctx context.Context, id string) (*domain.Avatar, error) {
 	return r.scanOne(ctx, `SELECT `+avatarColumns+` FROM avatars WHERE id = $1`, id)
 }
 
+// ListActiveByUser returns active avatars for a user sorted by creation time.
 func (r *Repository) ListActiveByUser(ctx context.Context, userID string) ([]domain.Avatar, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT `+avatarColumns+`
@@ -91,6 +100,7 @@ func (r *Repository) ListActiveByUser(ctx context.Context, userID string) ([]dom
 	return out, rows.Err()
 }
 
+// SoftDeleteByID marks an avatar deleted and updates its timestamp.
 func (r *Repository) SoftDeleteByID(ctx context.Context, id string, deletedAt time.Time) error {
 	res, err := r.db.ExecContext(ctx, `
 		UPDATE avatars
@@ -103,6 +113,7 @@ func (r *Repository) SoftDeleteByID(ctx context.Context, id string, deletedAt ti
 	return requireAffected(res)
 }
 
+// MarkPublishFailed marks an avatar as failed after broker publication errors.
 func (r *Repository) MarkPublishFailed(ctx context.Context, id string) error {
 	res, err := r.db.ExecContext(ctx, `
 		UPDATE avatars
@@ -115,6 +126,7 @@ func (r *Repository) MarkPublishFailed(ctx context.Context, id string) error {
 	return requireAffected(res)
 }
 
+// UpdateProcessingResult stores generated thumbnail keys and final processing status.
 func (r *Repository) UpdateProcessingResult(ctx context.Context, id, thumb100, thumb300 string) error {
 	status := domain.StatusFailed
 	if thumb100 != "" && thumb300 != "" {

@@ -1,3 +1,4 @@
+// Package httpapi exposes the HTTP routes for the avatar service.
 package httpapi
 
 import (
@@ -16,8 +17,10 @@ import (
 	"go-avatar-service/internal/service"
 )
 
+// MaxUploadBytes is the maximum accepted upload size for original images.
 const MaxUploadBytes = 10 * 1024 * 1024
 
+// NewRouter wires the public HTTP API, web pages, and health endpoint.
 func NewRouter(svc *service.AvatarService, health service.RuntimeHealthChecker) http.Handler {
 	r := chi.NewRouter()
 	h := &handler{svc: svc, healthSvc: health}
@@ -247,6 +250,7 @@ func accessLog(next http.Handler) http.Handler {
 	})
 }
 
+// UploadPageHTML returns the embedded upload page markup.
 func UploadPageHTML() string {
 	return `<!DOCTYPE html>
 <html lang="en">
