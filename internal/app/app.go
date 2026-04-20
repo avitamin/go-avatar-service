@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -126,55 +125,6 @@ func RunWorker(ctx context.Context, out io.Writer) error {
 	)
 	_, _ = fmt.Fprintln(out, "worker started")
 	return runner.Run(ctx)
-}
-
-func RunMigrate(ctx context.Context, direction string, out io.Writer) error {
-	if out == nil {
-		out = io.Discard
-	}
-	dsn := os.Getenv("POSTGRES_DSN")
-	if dsn == "" {
-		return errors.New("POSTGRES_DSN is required")
-	}
-	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = db.Close() }()
-	if err := db.PingContext(ctx); err != nil {
-		return err
-	}
-	switch direction {
-	case "up":
-		return executeMigration(ctx, db, "migrations/001_init.up.sql", out, "migrate up ok")
-	case "down":
-		return executeMigration(ctx, db, "migrations/001_init.down.sql", out, "migrate down ok")
-	case "status":
-		var exists bool
-		if err := db.QueryRowContext(ctx, "SELECT to_regclass('public.avatars') IS NOT NULL").Scan(&exists); err != nil {
-			return err
-		}
-		if exists {
-			_, _ = fmt.Fprintln(out, "migrate status ok")
-		} else {
-			_, _ = fmt.Fprintln(out, "migrate status pending")
-		}
-		return nil
-	default:
-		return fmt.Errorf("unknown migrate subcommand %q", direction)
-	}
-}
-
-func executeMigration(ctx context.Context, db *sql.DB, path string, out io.Writer, message string) error {
-	sqlBytes, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	if _, err := db.ExecContext(ctx, string(sqlBytes)); err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintln(out, message)
-	return nil
 }
 
 func usage(out io.Writer) error {

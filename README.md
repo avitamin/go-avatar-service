@@ -38,7 +38,7 @@
 - `web/static/index.html` - upload UI, отправляет multipart поле `file`.
 - `tests/contract/` - contract smoke runner и self-tests.
 
-Текущий runtime переключается по env-конфигурации. Если заданы `POSTGRES_DSN`, полный набор `MINIO_*` и `RABBITMQ_URL`, `server` и `worker` используют реальные PostgreSQL/MinIO/RabbitMQ adapters. Если external storage env не задан, bootstrap оставляет in-memory repository/storage fallback для локальных unit-style запусков. `avatars-service migrate up|down|status` применяет SQL к PostgreSQL и остается отдельным явным operational step. `GET /health` выполняет runtime checks по `postgres`, `minio`, `rabbitmq`; при fallback/noop runtime или недоступности dependency endpoint остается `200`, но возвращает `status=degraded`.
+Текущий runtime переключается по env-конфигурации. Если заданы `POSTGRES_DSN`, полный набор `MINIO_*` и `RABBITMQ_URL`, `server` и `worker` используют реальные PostgreSQL/MinIO/RabbitMQ adapters. Если external storage env не задан, bootstrap оставляет in-memory repository/storage fallback для локальных unit-style запусков. `avatars-service migrate up|down|status` использует встроенный `golang-migrate` runner против PostgreSQL и остается отдельным явным operational step. `GET /health` выполняет runtime checks по `postgres`, `minio`, `rabbitmq`; при fallback/noop runtime или недоступности dependency endpoint остается `200`, но возвращает `status=degraded`.
 
 ## CLI
 
@@ -53,6 +53,18 @@ go run ./cmd/avatars-service migrate status
 ```
 
 Миграции являются отдельным явным шагом и не запускаются автоматически при старте `server` или `worker`.
+
+`migrate` использует каталог `migrations/` как file source для `golang-migrate`. По умолчанию binary ищет его относительно текущего рабочего каталога, рядом с исполняемым файлом и на уровень выше каталога исполняемого файла. При нестандартном запуске путь можно зафиксировать явно через `MIGRATIONS_DIR=/abs/path/to/migrations`.
+
+`migrate status` читает реальное состояние migration engine, а не наличие таблицы `avatars`. Вывод имеет вид:
+
+```text
+migrate status pending
+migrate status ok version=1 dirty=false
+migrate status dirty version=2
+```
+
+Dirty state выводится явно и не маскируется под `ok`. Команда `status` остается диагностической и завершается успешно; recovery для dirty state в первой итерации выполняется вручную.
 
 Legacy wrappers оставлены временно:
 
@@ -190,14 +202,15 @@ Exit codes contract runner:
 - `rabbitmq`
 - `minio`
 
-Команда:
+Базовый flow:
 
 ```bash
+make docker-up-detached
 docker compose run --rm server migrate up
-docker compose up --build
+make docker-contract-tests
 ```
 
-Docker Compose поднимает PostgreSQL, MinIO, RabbitMQ, server и worker. Перед первым запуском server/worker нужен явный migration step; миграции не запускаются автоматически при старте процессов.
+Docker Compose поднимает PostgreSQL, MinIO, RabbitMQ, server и worker. Перед первым запуском server/worker нужен явный migration step; миграции не запускаются автоматически при старте процессов. Metadata о version и dirty state хранится в служебной таблице `schema_migrations`, которую ведет `golang-migrate`.
 
 Docker Compose публикует server на `http://localhost:8080`. Локальные Makefile/JetBrains конфигурации используют `http://localhost:18080`, чтобы не занимать стандартный compose-порт.
 
@@ -207,6 +220,29 @@ Host-порты Docker Compose можно переопределить чере�
 cp .env.example .env
 printf 'COMPOSE_MINIO_CONSOLE_PORT=19001\n' >> .env
 make docker-up-detached
+```
+
+Если заняты несколько стандартных портов, можно переопределить весь compose-набор:
+
+```bash
+cp .env.example .env
+cat >> .env <<'EOF'
+COMPOSE_HTTP_PORT=18081
+COMPOSE_POSTGRES_PORT=15432
+COMPOSE_RABBITMQ_PORT=15673
+COMPOSE_RABBITMQ_MANAGEMENT_PORT=15674
+COMPOSE_MINIO_API_PORT=19000
+COMPOSE_MINIO_CONSOLE_PORT=19001
+EOF
+make docker-up-detached
+docker compose run --rm server migrate up
+make docker-contract-tests
+```
+
+Operational note: `docker compose up` использует только container start order и не ждет readiness PostgreSQL/RabbitMQ. Если `server` или `worker` завершились сразу после старта из-за `connect: connection refused`, после готовности зависимостей достаточно повторно выполнить:
+
+```bash
+docker compose up -d server worker
 ```
 
 ## JetBrains Run Configurations
