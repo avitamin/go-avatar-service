@@ -16,28 +16,16 @@
 
 ## Build, Test, and Development Commands
 
-- `go mod tidy`: синхронизирует зависимости модуля.
-- `go run ./cmd/avatars-service server`: запускает локальный HTTP-сервер.
-- `go run ./cmd/avatars-service worker`: запускает worker-процесс.
-- `go run ./cmd/avatars-service migrate up|down|status`: запускает явный migration lifecycle.
-- `go build -o ./bin/server ./cmd/server`: собирает бинарник сервера.
-- `go build -o ./bin/worker ./cmd/worker`: собирает бинарник worker.
-- `go build -o ./bin/avatars-service ./cmd/avatars-service`: собирает основной single binary.
-- `go build -o ./bin/avatar-contract-tests ./cmd/avatar-contract-tests`: собирает black-box бинарник контрактных автотестов.
-- `BASE_URL=http://localhost:18080 ./bin/avatar-contract-tests`: запускает contract smoke tests против локального сервиса на незанятом базовом URL.
-- `make test`, `make bench`, `make build`, `make build-server`, `make build-worker`, `make build-contract-tests`: короткие Makefile-цели для базовых команд.
-- `make run-server`: запускает server с локальным default `HTTP_ADDR=:18080`.
-- `make contract-tests`: собирает и запускает contract smoke runner с локальным default `BASE_URL=http://localhost:18080`.
-- `BASE_URL=http://localhost:8080 make contract-tests`: запускает contract smoke runner против явно указанного сервиса, например compose-порта.
-- `make docker-build`, `make docker-up-build`, `make docker-up-detached`, `make docker-down`, `make docker-ps`, `make docker-logs`, `make docker-contract-tests`: Makefile-цели для Docker Compose workflow.
-- `go test ./...`: запускает все Go-тесты, включая self-tests contract runner'а.
-- `go test -run='^$' -bench=. -benchmem ./...`: запускает benchmarks без повторного запуска unit-тестов.
+- `go test ./...`: базовая обязательная проверка.
+- `make run-server`: локальный server с default `HTTP_ADDR=:18080`.
+- `make contract-tests`: smoke runner с default `BASE_URL=http://localhost:18080`.
+- `make docker-up-detached`: поднимает локальный Compose stack.
+- `docker compose run --rm server migrate up`: явный migration step для Compose runtime.
+- `make docker-contract-tests`: smoke against compose URL `http://localhost:8080`.
 
-В `.idea/runConfigurations/` сохранены shared JetBrains конфигурации: `Server`, `Worker`, `Avatar Contract Tests`, `Make Test`, `Make Build Contract Tests`, `Make Contract Tests`, `Make Docker Build`, `Make Docker Up Build`, `Make Docker Up Detached`, `Make Docker Down`, `Make Docker Ps`, `Make Docker Logs`, `Make Docker Contract Tests`. Локальные server/contract конфигурации используют `http://localhost:18080`, Docker Compose конфигурации используют compose-порт `http://localhost:8080`.
+Локальный default URL: `http://localhost:18080`. Docker Compose default URL: `http://localhost:8080`.
 
-Docker Compose публикует server на `http://localhost:8080` и поднимает PostgreSQL, MinIO, RabbitMQ, server и worker. При заданных `POSTGRES_DSN`, `MINIO_*` и `RABBITMQ_URL` server/worker используют реальные runtime adapters; без external storage env остается in-memory fallback для локальных unit-style запусков. Миграции выполняются отдельным явным шагом, например `docker compose run --rm server migrate up`.
-
-Host-порты Docker Compose можно переопределять через локальный `.env`; шаблон дефолтов хранится в `.env.example`, сам `.env` не коммитится.
+Полный developer workflow, `.env` overrides, shared JetBrains run configurations и скрипт подбора свободных портов описаны в `docs/development-workflow.md`. Шаблон compose-портов хранится в `.env.example`, сам `.env` не коммитится.
 
 ## Coding Style & Naming Conventions
 

@@ -16,6 +16,7 @@
 - [Навигация по спекам](docs/specs/README.md)
 - [Навигация по планам](docs/plans/README.md)
 - [План перехода миграций на golang-migrate](docs/plans/02-migrations-golang-migrate-plan.md)
+- [Developer workflow](docs/development-workflow.md)
 
 ## Текущее состояние
 
@@ -136,132 +137,19 @@ Upload из web идет напрямую в `POST /api/v1/avatars`; отдел�
 ## Локальная разработка
 
 ```bash
-go mod tidy
 go test ./...
-go test ./internal/... -cover
-go test -run='^$' -bench=. -benchmem ./...
-go build ./cmd/avatars-service ./cmd/server ./cmd/worker ./cmd/avatar-contract-tests
-```
-
-Makefile:
-
-```bash
-make test
-make bench
-make build
-make build-server
-make build-worker
-make build-contract-tests
 make run-server
-make run-worker
 make contract-tests
-make migrate-up
-make migrate-down
-make migrate-status
-make docker-build
-make docker-up-build
 make docker-up-detached
-make docker-down
-make docker-ps
-make docker-logs
+docker compose run --rm server migrate up
 make docker-contract-tests
 ```
-
-Makefile настроен под локальную разработку:
 
 - `make run-server` использует `HTTP_ADDR=:18080` по умолчанию.
 - `make contract-tests` использует `BASE_URL=http://localhost:18080` по умолчанию.
+- Docker Compose публикует server на `http://localhost:8080`.
 
-Значения можно переопределить:
-
-```bash
-make run-server HTTP_ADDR=:18081
-make contract-tests BASE_URL=http://localhost:18081
-```
-
-Contract smoke runner запускается против уже поднятого сервиса:
-
-```bash
-BASE_URL=http://localhost:18080 go run ./cmd/avatar-contract-tests
-BASE_URL=http://localhost:18080 make contract-tests
-```
-
-Exit codes contract runner:
-
-- `0` - все сценарии прошли.
-- `1` - есть проваленные контрактные сценарии.
-- `2` - неверная конфигурация runner'а, например не задан `BASE_URL`.
-
-## Docker Compose
-
-Локальный compose описывает:
-
-- `server`
-- `worker`
-- `postgres`
-- `rabbitmq`
-- `minio`
-
-Базовый flow:
-
-```bash
-make docker-up-detached
-docker compose run --rm server migrate up
-make docker-contract-tests
-```
-
-Docker Compose поднимает PostgreSQL, MinIO, RabbitMQ, server и worker. Перед первым запуском server/worker нужен явный migration step; миграции не запускаются автоматически при старте процессов. Metadata о version и dirty state хранится в служебной таблице `schema_migrations`, которую ведет `golang-migrate`.
-
-Docker Compose публикует server на `http://localhost:8080`. Локальные Makefile/JetBrains конфигурации используют `http://localhost:18080`, чтобы не занимать стандартный compose-порт.
-
-Host-порты Docker Compose можно переопределить через локальный `.env`. Шаблон лежит в `.env.example`, сам `.env` игнорируется git. Например, если порт MinIO console `9001` занят:
-
-```bash
-cp .env.example .env
-printf 'COMPOSE_MINIO_CONSOLE_PORT=19001\n' >> .env
-make docker-up-detached
-```
-
-Если заняты несколько стандартных портов, можно переопределить весь compose-набор:
-
-```bash
-cp .env.example .env
-cat >> .env <<'EOF'
-COMPOSE_HTTP_PORT=18081
-COMPOSE_POSTGRES_PORT=15432
-COMPOSE_RABBITMQ_PORT=15673
-COMPOSE_RABBITMQ_MANAGEMENT_PORT=15674
-COMPOSE_MINIO_API_PORT=19000
-COMPOSE_MINIO_CONSOLE_PORT=19001
-EOF
-make docker-up-detached
-docker compose run --rm server migrate up
-make docker-contract-tests
-```
-
-Operational note: `docker compose up` использует только container start order и не ждет readiness PostgreSQL/RabbitMQ. Если `server` или `worker` завершились сразу после старта из-за `connect: connection refused`, после готовности зависимостей достаточно повторно выполнить:
-
-```bash
-docker compose up -d server worker
-```
-
-## JetBrains Run Configurations
-
-В `.idea/runConfigurations/` сохранены shared конфигурации:
-
-- `Server` - запускает `cmd/avatars-service server` с `HTTP_ADDR=:18080`.
-- `Worker` - запускает `cmd/avatars-service worker`.
-- `Avatar Contract Tests` - запускает contract runner с `BASE_URL=http://localhost:18080`.
-- `Make Test` - выполняет `make test`.
-- `Make Build Contract Tests` - выполняет `make build-contract-tests`.
-- `Make Contract Tests` - выполняет `make contract-tests`; локальный `BASE_URL=http://localhost:18080` берется из Makefile.
-- `Make Docker Build` - выполняет `make docker-build`.
-- `Make Docker Up Build` - выполняет `make docker-up-build`.
-- `Make Docker Up Detached` - выполняет `make docker-up-detached`.
-- `Make Docker Down` - выполняет `make docker-down`.
-- `Make Docker Ps` - выполняет `make docker-ps`.
-- `Make Docker Logs` - выполняет `make docker-logs`.
-- `Make Docker Contract Tests` - выполняет `make docker-contract-tests` против compose-порта `http://localhost:8080`.
+Полный developer workflow, `.env` overrides, shared JetBrains run configurations и скрипт подбора свободных портов вынесены в [docs/development-workflow.md](docs/development-workflow.md).
 
 ## Проектная структура
 
