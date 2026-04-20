@@ -11,7 +11,7 @@ Use this template when asking an AI agent to review a change.
 - Репозиторий: go-avatar-service
 - Сначала прочитай docs/prompts/context/project.md
 - Затем прочитай docs/prompts/agents/reviewer.md
-- Проверяй против docs/requirements/confirmed-requirements.md и docs/specs/avatar-service-v1.md
+- Проверяй против docs/requirements/confirmed-requirements.md и docs/specs/01-avatar-service-v1.md
 
 Change:
 {task}

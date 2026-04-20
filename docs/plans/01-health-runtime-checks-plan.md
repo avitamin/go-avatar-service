@@ -7,11 +7,11 @@
     - `/health` проверяет `postgres`, `minio`, `rabbitmq`
     - возвращает общий статус и статусы компонентов
     - при частичной деградации HTTP status остаётся `200`, а `status=degraded`
-- Архитектурный контекст и success criteria: [docs/specs/avatar-service-v1.md](./avatar-service-v1.md)
+- Архитектурный контекст и success criteria: [docs/specs/01-avatar-service-v1.md](../specs/01-avatar-service-v1.md)
   - взять требования:
     - `/health` должен отражать degraded state без перехода в `5xx`
     - `internal/service` допускает отдельный `health service`
-- Зафиксированная целевая правка: [docs/specs/health-runtime-checks.md](./health-runtime-checks.md)
+- Зафиксированная целевая правка: [docs/specs/02-health-runtime-checks.md](../specs/02-health-runtime-checks.md)
 
 ## Что взять из текущей реализации
 

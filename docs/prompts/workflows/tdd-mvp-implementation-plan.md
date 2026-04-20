@@ -10,12 +10,12 @@ Use this prompt when asking an AI agent to implement the MVP of `go-avatar-servi
 Цель:
 Реализовать MVP сервиса "Аватарница" по TDD, опираясь на основные источники истины:
 - docs/requirements/confirmed-requirements.md
-- docs/specs/avatar-service-v1.md
+- docs/specs/01-avatar-service-v1.md
 
 Контекст:
 - Сначала прочитай docs/prompts/context/project.md
 - Затем прочитай docs/requirements/confirmed-requirements.md
-- Затем прочитай docs/specs/avatar-service-v1.md
+- Затем прочитай docs/specs/01-avatar-service-v1.md
 - При работе над HTTP/API читай docs/prompts/agents/backend-implementer.md
 - При работе над worker читай docs/prompts/agents/worker-implementer.md
 - При работе над тестами читай docs/prompts/agents/tester.md

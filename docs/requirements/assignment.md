@@ -320,4 +320,4 @@ MinIO
 ## Связанные документы
 
 - [Подтвержденные требования](confirmed-requirements.md)
-- [Спека разработки v1](../specs/avatar-service-v1.md)
+- [Спека разработки v1](../specs/01-avatar-service-v1.md)

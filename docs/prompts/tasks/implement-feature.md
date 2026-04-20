@@ -10,7 +10,7 @@ Use this template when asking an AI agent to implement a feature.
 Контекст:
 - Репозиторий: go-avatar-service
 - Сначала прочитай docs/prompts/context/project.md
-- Затем прочитай docs/requirements/confirmed-requirements.md и docs/specs/avatar-service-v1.md
+- Затем прочитай docs/requirements/confirmed-requirements.md и docs/specs/01-avatar-service-v1.md
 
 Scope:
 {scope}

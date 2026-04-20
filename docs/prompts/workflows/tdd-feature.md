@@ -13,7 +13,7 @@ Use this prompt when asking an AI agent to implement a feature through TDD.
 Контекст:
 - Сначала прочитай docs/prompts/context/project.md
 - Затем прочитай docs/requirements/confirmed-requirements.md
-- Затем прочитай docs/specs/avatar-service-v1.md
+- Затем прочитай docs/specs/01-avatar-service-v1.md
 - Если задача относится к конкретной роли, прочитай подходящий файл из docs/prompts/agents/
 
 Workflow:

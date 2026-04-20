@@ -45,7 +45,7 @@
 Используйте как source of truth:
 
 1. `docs/requirements/confirmed-requirements.md`
-2. `docs/specs/avatar-service-v1.md`
+2. `docs/specs/01-avatar-service-v1.md`
 
 `docs/requirements/assignment.md` содержит исходное ТЗ и может конфликтовать с подтвержденными требованиями.
 `README.md` и `QWEN.md` местами описывают шаблонное или устаревшее состояние.

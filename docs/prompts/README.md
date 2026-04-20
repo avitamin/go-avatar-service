@@ -24,7 +24,7 @@
 Актуальные требования:
 
 - `docs/requirements/confirmed-requirements.md`
-- `docs/specs/avatar-service-v1.md`
+- `docs/specs/01-avatar-service-v1.md`
 
 Исторический контекст:
 
@@ -35,7 +35,7 @@
 Если документы конфликтуют, приоритет такой:
 
 1. `docs/requirements/confirmed-requirements.md`
-2. `docs/specs/avatar-service-v1.md`
+2. `docs/specs/01-avatar-service-v1.md`
 3. `docs/requirements/assignment.md`
 4. `README.md` и `QWEN.md`
 

@@ -3,7 +3,7 @@
 ## Источники информации
 
 - Основные требования: [docs/requirements/confirmed-requirements.md](../requirements/confirmed-requirements.md)
-- Базовая архитектурная спека: [docs/specs/avatar-service-v1.md](./avatar-service-v1.md)
+- Базовая архитектурная спека: [docs/specs/01-avatar-service-v1.md](./01-avatar-service-v1.md)
 - Текущее wiring и bootstrap: `internal/app/app.go`
 - Текущий HTTP handler `/health`: `internal/http/router.go`
 - Текущие HTTP tests: `internal/http/router_test.go`
