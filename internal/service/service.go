@@ -260,9 +260,6 @@ func (s *AvatarService) GalleryByUser(ctx context.Context, userID string) ([]Ava
 	return out, len(items) > 0, nil
 }
 
-func (s *AvatarService) Repo() Repository { return s.repo }
-func (s *AvatarService) Storage() Storage { return s.storage }
-
 func dto(a domain.Avatar) AvatarDTO {
 	return AvatarDTO{
 		ID:        a.ID,
