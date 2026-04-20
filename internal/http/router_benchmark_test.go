@@ -20,7 +20,14 @@ import (
 func BenchmarkRouterHealth(b *testing.B) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	svc := service.NewAvatarService(service.NewMemoryRepository(), service.NewMemoryStorage(), noopBroker{})
-	router := NewRouter(svc, HealthService{Postgres: true, Minio: true, RabbitMQ: true})
+	router := NewRouter(svc, staticHealthService{snapshot: service.HealthSnapshot{
+		Status: service.HealthStatusOK,
+		Components: map[string]string{
+			"postgres": service.HealthStatusOK,
+			"minio":    service.HealthStatusOK,
+			"rabbitmq": service.HealthStatusOK,
+		},
+	}})
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 
 	b.ReportAllocs()
@@ -45,7 +52,14 @@ func BenchmarkRouterReadAvatar(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	router := NewRouter(svc, HealthService{Postgres: true, Minio: true, RabbitMQ: true})
+	router := NewRouter(svc, staticHealthService{snapshot: service.HealthSnapshot{
+		Status: service.HealthStatusOK,
+		Components: map[string]string{
+			"postgres": service.HealthStatusOK,
+			"minio":    service.HealthStatusOK,
+			"rabbitmq": service.HealthStatusOK,
+		},
+	}})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/avatars/"+created.ID, nil)
 
 	b.ReportAllocs()
@@ -61,7 +75,14 @@ func BenchmarkRouterReadAvatar(b *testing.B) {
 func BenchmarkRouterUploadJPEG(b *testing.B) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	svc := service.NewAvatarService(service.NewMemoryRepository(), service.NewMemoryStorage(), noopBroker{})
-	router := NewRouter(svc, HealthService{Postgres: true, Minio: true, RabbitMQ: true})
+	router := NewRouter(svc, staticHealthService{snapshot: service.HealthSnapshot{
+		Status: service.HealthStatusOK,
+		Components: map[string]string{
+			"postgres": service.HealthStatusOK,
+			"minio":    service.HealthStatusOK,
+			"rabbitmq": service.HealthStatusOK,
+		},
+	}})
 	body, contentType := benchmarkMultipartPayload(b, benchmarkJPEG(b))
 
 	b.ReportAllocs()

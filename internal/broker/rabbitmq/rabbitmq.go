@@ -54,6 +54,21 @@ func (c *Client) Publish(ctx context.Context, topic string, msg []byte, messageI
 	})
 }
 
+func (c *Client) HealthCheck(ctx context.Context) error {
+	if c == nil || c.conn == nil {
+		return errors.New("rabbitmq client is closed")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	ch, err := c.conn.Channel()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = ch.Close() }()
+	return ch.ExchangeDeclarePassive(c.exchange, "topic", true, false, false, false, nil)
+}
+
 func (c *Client) Consume(ctx context.Context) (<-chan worker.Delivery, error) {
 	if c == nil || c.ch == nil {
 		return nil, errors.New("rabbitmq client is closed")

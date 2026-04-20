@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/minio/minio-go/v7"
@@ -43,6 +44,17 @@ func Open(ctx context.Context, cfg Config) (*Storage, error) {
 		}
 	}
 	return &Storage{client: client, bucket: cfg.Bucket}, nil
+}
+
+func (s *Storage) HealthCheck(ctx context.Context) error {
+	exists, err := s.client.BucketExists(ctx, s.bucket)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("bucket %q is not accessible", s.bucket)
+	}
+	return nil
 }
 
 func (s *Storage) Put(ctx context.Context, key string, data []byte, mime string) error {

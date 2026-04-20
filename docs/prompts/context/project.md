@@ -38,7 +38,7 @@
 - RabbitMQ publisher/consumer включается при `RABBITMQ_URL`; worker обрабатывает `avatar.uploaded` и `avatar.delete_requested`.
 - Если external storage env не задан, bootstrap использует in-memory repository/storage fallback.
 - `avatars-service migrate up|down|status` применяет SQL к PostgreSQL и остается отдельным явным шагом.
-- `/health` имеет компонентную модель; глубокие runtime connectivity checks пока ограничены.
+- `/health` имеет runtime component checks для `postgres`, `minio`, `rabbitmq`; при fallback/noop runtime или ошибке dependency endpoint отвечает `200` с `status=degraded`.
 
 ## Requirements Priority
 

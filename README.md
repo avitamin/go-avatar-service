@@ -32,7 +32,7 @@
 - `web/static/index.html` - upload UI, отправляет multipart поле `file`.
 - `tests/contract/` - contract smoke runner и self-tests.
 
-Текущий runtime переключается по env-конфигурации. Если заданы `POSTGRES_DSN`, полный набор `MINIO_*` и `RABBITMQ_URL`, `server` и `worker` используют реальные PostgreSQL/MinIO/RabbitMQ adapters. Если external storage env не задан, bootstrap оставляет in-memory repository/storage fallback для локальных unit-style запусков. `avatars-service migrate up|down|status` применяет SQL к PostgreSQL и остается отдельным явным operational step.
+Текущий runtime переключается по env-конфигурации. Если заданы `POSTGRES_DSN`, полный набор `MINIO_*` и `RABBITMQ_URL`, `server` и `worker` используют реальные PostgreSQL/MinIO/RabbitMQ adapters. Если external storage env не задан, bootstrap оставляет in-memory repository/storage fallback для локальных unit-style запусков. `avatars-service migrate up|down|status` применяет SQL к PostgreSQL и остается отдельным явным operational step. `GET /health` выполняет runtime checks по `postgres`, `minio`, `rabbitmq`; при fallback/noop runtime или недоступности dependency endpoint остается `200`, но возвращает `status=degraded`.
 
 ## CLI
 
@@ -77,6 +77,21 @@ go run ./cmd/worker
 - `300x300`
 
 Без `size` возвращается `original`. Query parameter `format` в MVP не поддерживается и возвращает `400`.
+
+`/health` возвращает top-level `status` и nested `components`:
+
+```json
+{
+  "status": "ok",
+  "components": {
+    "postgres": "ok",
+    "minio": "ok",
+    "rabbitmq": "ok"
+  }
+}
+```
+
+Допустимые значения статусов: `ok`, `degraded`. При частичной деградации или fallback/noop adapters HTTP status остается `200`, а проблемный компонент и общий `status` становятся `degraded`.
 
 Read endpoints публичные. `X-User-ID` обязателен только для изменяющих операций. Ошибки возвращаются в едином JSON shape:
 

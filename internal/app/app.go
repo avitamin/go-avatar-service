@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"go-avatar-service/internal/broker/rabbitmq"
 	httpapi "go-avatar-service/internal/http"
@@ -21,6 +22,8 @@ import (
 	miniostore "go-avatar-service/internal/storage/minio"
 	"go-avatar-service/internal/worker"
 )
+
+const healthCheckTimeout = 500 * time.Millisecond
 
 func Run(args []string, out io.Writer) error {
 	if len(args) < 2 {
@@ -68,20 +71,21 @@ func RunServer(ctx context.Context) error {
 	if addr == "" {
 		addr = ":8080"
 	}
-	repo, storage, closeStore, err := newStoreFromEnv(ctx)
+	storeRuntime, err := newStoreFromEnv(ctx)
 	if err != nil {
 		return err
 	}
-	defer closeStore()
-	broker, closeBroker, err := newBrokerFromEnv()
+	defer storeRuntime.close()
+	brokerRuntime, err := newBrokerFromEnv()
 	if err != nil {
 		return err
 	}
-	defer closeBroker()
-	svc := service.NewAvatarService(repo, storage, broker)
+	defer brokerRuntime.close()
+	svc := service.NewAvatarService(storeRuntime.repo, storeRuntime.storage, brokerRuntime.broker)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	server := &http.Server{
 		Addr:    addr,
-		Handler: httpapi.NewRouter(svc, httpapi.HealthService{Postgres: true, Minio: true, RabbitMQ: true}),
+		Handler: httpapi.NewRouter(svc, newServerHealthService(logger, storeRuntime, brokerRuntime)),
 	}
 	go func() {
 		<-ctx.Done()
@@ -108,16 +112,16 @@ func RunWorker(ctx context.Context, out io.Writer) error {
 		return err
 	}
 	defer func() { _ = client.Close() }()
-	repo, storage, closeStore, err := newStoreFromEnv(ctx)
+	storeRuntime, err := newStoreFromEnv(ctx)
 	if err != nil {
 		return err
 	}
-	defer closeStore()
+	defer storeRuntime.close()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	runner := worker.NewRunner(
 		client,
-		worker.NewUploadHandler(repo, storage, logger),
-		worker.NewDeleteHandler(repo, storage, logger),
+		worker.NewUploadHandler(storeRuntime.repo, storeRuntime.storage, logger),
+		worker.NewDeleteHandler(storeRuntime.repo, storeRuntime.storage, logger),
 		logger,
 	)
 	_, _ = fmt.Fprintln(out, "worker started")
@@ -191,40 +195,82 @@ type logBroker struct{}
 
 func (logBroker) Publish(context.Context, string, []byte, string) error { return nil }
 
-func newBrokerFromEnv() (service.Broker, func(), error) {
+type storeRuntime struct {
+	repo     service.Repository
+	storage  service.Storage
+	close    func()
+	postgres service.ComponentProbe
+	minio    service.ComponentProbe
+}
+
+type brokerRuntime struct {
+	broker   service.Broker
+	close    func()
+	rabbitmq service.ComponentProbe
+}
+
+func newServerHealthService(logger *slog.Logger, store storeRuntime, broker brokerRuntime) service.RuntimeHealthChecker {
+	return service.NewRuntimeHealthService(logger, healthCheckTimeout, service.RuntimeProbes{
+		Postgres: store.postgres,
+		Minio:    store.minio,
+		RabbitMQ: broker.rabbitmq,
+	})
+}
+
+func newBrokerFromEnv() (brokerRuntime, error) {
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
-		return logBroker{}, func() {}, nil
+		return brokerRuntime{
+			broker:   logBroker{},
+			close:    func() {},
+			rabbitmq: service.DegradedComponent("rabbitmq broker is running in noop log mode"),
+		}, nil
 	}
 	client, err := rabbitmq.Dial(rabbitURL)
 	if err != nil {
-		return nil, nil, err
+		return brokerRuntime{}, err
 	}
-	return client, func() { _ = client.Close() }, nil
+	return brokerRuntime{
+		broker:   client,
+		close:    func() { _ = client.Close() },
+		rabbitmq: service.HealthyComponent(client.HealthCheck),
+	}, nil
 }
 
-func newStoreFromEnv(ctx context.Context) (service.Repository, service.Storage, func(), error) {
+func newStoreFromEnv(ctx context.Context) (storeRuntime, error) {
 	dsn := os.Getenv("POSTGRES_DSN")
 	minioCfg, hasMinio, err := minioConfigFromEnv()
 	if err != nil {
-		return nil, nil, nil, err
+		return storeRuntime{}, err
 	}
 	if dsn == "" && !hasMinio {
-		return service.NewMemoryRepository(), service.NewMemoryStorage(), func() {}, nil
+		return storeRuntime{
+			repo:     service.NewMemoryRepository(),
+			storage:  service.NewMemoryStorage(),
+			close:    func() {},
+			postgres: service.DegradedComponent("postgres repository is running in memory fallback mode"),
+			minio:    service.DegradedComponent("minio storage is running in memory fallback mode"),
+		}, nil
 	}
 	if dsn == "" || !hasMinio {
-		return nil, nil, nil, errors.New("POSTGRES_DSN and MINIO_ENDPOINT/MINIO_ACCESS_KEY/MINIO_SECRET_KEY/MINIO_BUCKET must be configured together")
+		return storeRuntime{}, errors.New("POSTGRES_DSN and MINIO_ENDPOINT/MINIO_ACCESS_KEY/MINIO_SECRET_KEY/MINIO_BUCKET must be configured together")
 	}
 	repo, err := pgrepo.Open(ctx, dsn)
 	if err != nil {
-		return nil, nil, nil, err
+		return storeRuntime{}, err
 	}
 	storage, err := miniostore.Open(ctx, minioCfg)
 	if err != nil {
 		_ = repo.Close()
-		return nil, nil, nil, err
+		return storeRuntime{}, err
 	}
-	return repo, storage, func() { _ = repo.Close() }, nil
+	return storeRuntime{
+		repo:     repo,
+		storage:  storage,
+		close:    func() { _ = repo.Close() },
+		postgres: service.HealthyComponent(repo.HealthCheck),
+		minio:    service.HealthyComponent(storage.HealthCheck),
+	}, nil
 }
 
 func minioConfigFromEnv() (miniostore.Config, bool, error) {

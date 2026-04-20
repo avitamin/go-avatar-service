@@ -18,13 +18,7 @@ import (
 
 const MaxUploadBytes = 10 * 1024 * 1024
 
-type HealthService struct {
-	Postgres bool
-	Minio    bool
-	RabbitMQ bool
-}
-
-func NewRouter(svc *service.AvatarService, health HealthService) http.Handler {
+func NewRouter(svc *service.AvatarService, health service.RuntimeHealthChecker) http.Handler {
 	r := chi.NewRouter()
 	h := &handler{svc: svc, healthSvc: health}
 	r.Get("/health", h.health)
@@ -42,22 +36,12 @@ func NewRouter(svc *service.AvatarService, health HealthService) http.Handler {
 
 type handler struct {
 	svc       *service.AvatarService
-	healthSvc HealthService
+	healthSvc service.RuntimeHealthChecker
 }
 
-func (h *handler) health(w http.ResponseWriter, _ *http.Request) {
-	components := map[string]string{
-		"postgres": status(h.healthSvc.Postgres),
-		"minio":    status(h.healthSvc.Minio),
-		"rabbitmq": status(h.healthSvc.RabbitMQ),
-	}
-	overall := "ok"
-	for _, s := range components {
-		if s != "ok" {
-			overall = "degraded"
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": overall, "components": components})
+func (h *handler) health(w http.ResponseWriter, r *http.Request) {
+	snapshot := h.healthSvc.Check(r.Context())
+	writeJSON(w, http.StatusOK, snapshot)
 }
 
 func (h *handler) upload(w http.ResponseWriter, r *http.Request) {
@@ -224,13 +208,6 @@ func parseReadQuery(w http.ResponseWriter, r *http.Request) (domain.Size, bool) 
 		return "", false
 	}
 	return size, true
-}
-
-func status(ok bool) string {
-	if ok {
-		return "ok"
-	}
-	return "degraded"
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

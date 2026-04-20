@@ -20,7 +20,14 @@ import (
 
 func TestHTTPUploadValidationAndSuccess(t *testing.T) {
 	svc := service.NewAvatarService(service.NewMemoryRepository(), service.NewMemoryStorage(), noopBroker{})
-	server := httptest.NewServer(NewRouter(svc, HealthService{Postgres: true, Minio: true, RabbitMQ: true}))
+	server := httptest.NewServer(NewRouter(svc, staticHealthService{snapshot: service.HealthSnapshot{
+		Status: service.HealthStatusOK,
+		Components: map[string]string{
+			"postgres": service.HealthStatusOK,
+			"minio":    service.HealthStatusOK,
+			"rabbitmq": service.HealthStatusOK,
+		},
+	}}))
 	defer server.Close()
 
 	tests := []struct {
@@ -63,13 +70,24 @@ func TestHTTPUploadValidationAndSuccess(t *testing.T) {
 
 func TestHTTPReadListDeleteWebAndHealth(t *testing.T) {
 	svc := service.NewAvatarService(service.NewMemoryRepository(), service.NewMemoryStorage(), noopBroker{})
-	router := NewRouter(svc, HealthService{Postgres: true, Minio: false, RabbitMQ: true})
+	router := NewRouter(svc, staticHealthService{snapshot: service.HealthSnapshot{
+		Status: service.HealthStatusDegraded,
+		Components: map[string]string{
+			"postgres": service.HealthStatusOK,
+			"minio":    service.HealthStatusDegraded,
+			"rabbitmq": service.HealthStatusOK,
+		},
+	}})
 	server := httptest.NewServer(router)
 	defer server.Close()
 
 	createdID := uploadHTTP(t, server.URL, "user-1")
 
-	checkStatus(t, http.MethodGet, server.URL+"/health", nil, http.StatusOK)
+	assertHealth(t, server.URL+"/health", service.HealthStatusDegraded, map[string]string{
+		"postgres": service.HealthStatusOK,
+		"minio":    service.HealthStatusDegraded,
+		"rabbitmq": service.HealthStatusOK,
+	})
 	checkStatus(t, http.MethodGet, server.URL+"/api/v1/avatars/"+createdID, nil, http.StatusOK)
 	checkStatus(t, http.MethodGet, server.URL+"/api/v1/avatars/"+createdID+"?size=42x42", nil, http.StatusBadRequest)
 	checkStatus(t, http.MethodGet, server.URL+"/api/v1/avatars/"+createdID+"?format=webp", nil, http.StatusBadRequest)
@@ -188,6 +206,44 @@ func testJPEG(t *testing.T) []byte {
 type noopBroker struct{}
 
 func (noopBroker) Publish(context.Context, string, []byte, string) error { return nil }
+
+type staticHealthService struct {
+	snapshot service.HealthSnapshot
+}
+
+func (s staticHealthService) Check(context.Context) service.HealthSnapshot {
+	return s.snapshot
+}
+
+func assertHealth(t *testing.T, url, wantStatus string, wantComponents map[string]string) {
+	t.Helper()
+
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("health status code = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var payload struct {
+		Status     string            `json:"status"`
+		Components map[string]string `json:"components"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if payload.Status != wantStatus {
+		t.Fatalf("health status = %q, want %q", payload.Status, wantStatus)
+	}
+	for component, want := range wantComponents {
+		if payload.Components[component] != want {
+			t.Fatalf("%s = %q, want %q", component, payload.Components[component], want)
+		}
+	}
+}
 
 func TestUploadPageUsesFileField(t *testing.T) {
 	page := UploadPageHTML()

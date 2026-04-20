@@ -32,6 +32,10 @@ func (r *Repository) Close() error {
 	return r.db.Close()
 }
 
+func (r *Repository) HealthCheck(ctx context.Context) error {
+	return r.db.PingContext(ctx)
+}
+
 func (r *Repository) Create(ctx context.Context, a *domain.Avatar) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO avatars (
