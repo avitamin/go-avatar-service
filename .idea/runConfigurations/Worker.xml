@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Worker" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="avatar-service" />
+    <working_directory value="$PROJECT_DIR$" />
+    <kind value="PACKAGE" />
+    <package value="go-avatar-service/cmd/avatars-service" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/cmd/avatars-service/main.go" />
+    <parameters value="worker" />
+    <method v="2" />
+  </configuration>
+</component>

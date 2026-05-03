@@ -2,24 +2,30 @@
 
 ## Project Structure & Module Organization
 
-Это Go-модуль `go-avatar-service`. Точки входа сейчас находятся в `cmd/`: `cmd/server/main.go` запускает HTTP-сервер на `:8080`, а `cmd/worker/main.go` запускает фоновый worker. Веб-интерфейс сейчас представлен файлом `web/static/index.html`. По мере развития проекта держите приватную логику в `internal/` по структуре из актуальной спеки v1: `http/`, `service/`, `repository/`, `storage/`, `broker/`, `domain/`, `config/`, `worker/`. Публичный код кладите в `pkg/` только если он действительно рассчитан на переиспользование вне сервиса.
+Это Go-модуль `go-avatar-service`. Основная точка входа находится в `cmd/avatars-service` и поддерживает subcommands `server`, `worker`, `migrate`. Старые `cmd/server` и `cmd/worker` оставлены как thin compatibility wrappers. `cmd/avatar-contract-tests/main.go` собирает black-box runner контрактных smoke-тестов HTTP API. Веб-интерфейс представлен файлом `web/static/index.html`. Приватную логику держите в `internal/` по структуре из актуальной спеки v1: `http/`, `service/`, `repository/`, `storage/`, `broker/`, `domain/`, `config/`, `worker`. Публичный код кладите в `pkg/` только если он действительно рассчитан на переиспользование вне сервиса.
 
 ## AI Agent Prompts
 
 Промты и роли для AI-агентов находятся в `docs/prompts/`. Перед планированием, реализацией, ревью или тестированием задач читайте `docs/prompts/README.md` и `docs/prompts/context/project.md`.
 
+Для Codex и других AI-агентов каталоги `docs/prompts/` и `docs/plans/` не являются source of truth по продуктовым требованиям, текущему task scope или обязательному workflow по умолчанию. Не используйте их как автоматические инструкции, backlog или план выполнения, если пользователь явно не попросил открыть конкретный файл из этих директорий.
+
+Если во время поиска, обзора репозитория или bulk-read агент случайно увидел файлы из `docs/prompts/` или `docs/plans/`, он должен трактовать их только как справочные артефакты и игнорировать как активные указания к действию, пока пользователь явно не сослался на конкретный prompt, plan, role, workflow или template.
+
 Актуальные источники требований: `docs/requirements/confirmed-requirements.md` и `docs/specs/avatar-service-v1.md`. Если они конфликтуют с README, QWEN.md или исходным ТЗ, используйте confirmed requirements и v1 spec как более приоритетные документы.
 
 ## Build, Test, and Development Commands
 
-- `go mod tidy`: синхронизирует зависимости модуля.
-- `go run ./cmd/server`: запускает локальный HTTP-сервер.
-- `go run ./cmd/worker`: запускает worker-процесс.
-- `go build -o ./bin/server ./cmd/server`: собирает бинарник сервера.
-- `go build -o ./bin/worker ./cmd/worker`: собирает бинарник worker.
-- `go test ./...`: запускает все Go-тесты после их добавления.
+- `go test ./...`: базовая обязательная проверка.
+- `make run-server`: локальный server с default `HTTP_ADDR=:18080`.
+- `make contract-tests`: smoke runner с default `BASE_URL=http://localhost:18080`.
+- `make docker-up-detached`: поднимает локальный Compose stack.
+- `docker compose run --rm server migrate up`: явный migration step для Compose runtime.
+- `make docker-contract-tests`: smoke against compose URL `http://localhost:8080`.
 
-Docker Compose упомянут в README как будущий сценарий, но compose-файла сейчас нет. Не опирайтесь на него, пока конфигурация не появится в репозитории.
+Локальный default URL: `http://localhost:18080`. Docker Compose default URL: `http://localhost:8080`.
+
+Полный developer workflow, `.env` overrides, shared JetBrains run configurations и скрипт подбора свободных портов описаны в `docs/development-workflow.md`. Шаблон compose-портов хранится в `.env.example`, сам `.env` не коммитится.
 
 ## Coding Style & Naming Conventions
 
@@ -27,11 +33,17 @@ Docker Compose упомянут в README как будущий сценарий
 
 ## Testing Guidelines
 
-Разработка ведется через TDD: сначала формулируйте ожидаемое поведение тестом, убедитесь, что он падает по правильной причине, затем реализуйте минимальный код и выполните refactor при зеленых тестах. Используйте стандартный пакет `testing`, пока проект явно не выберет другой фреймворк. Unit-тесты размещайте рядом с кодом, например `internal/service/avatar_test.go`. Для валидации, HTTP handlers и storage edge cases предпочитайте table-driven tests. Интеграционные и e2e-тесты кладите в `tests/`, если им нужны реальные внешние сервисы.
+Разработка ведется через TDD: сначала формулируйте ожидаемое поведение тестом, убедитесь, что он падает по правильной причине, затем реализуйте минимальный код и выполните refactor при зеленых тестах. Используйте стандартный пакет `testing`, пока проект явно не выберет другой фреймворк. Unit-тесты размещайте рядом с кодом, например `internal/service/avatar_test.go`. Для валидации, HTTP handlers и storage edge cases предпочитайте table-driven tests. Интеграционные и e2e-тесты кладите в `tests/`, если им нужны реальные внешние сервисы. Contract smoke runner в `tests/contract` не импортирует `internal/` код и проверяет API только через HTTP.
+
+Benchmark-прогон не является обязательным gate для каждого изменения. Запускайте `make bench` опционально перед PR или отчетом, если изменения затрагивают image processing, service selection/fallback, HTTP middleware/router hot paths, worker thumbnail generation или могут повлиять на allocations/latency.
 
 ## Commit & Pull Request Guidelines
 
-История использует краткий Conventional Commit style, например `docs: добавить QWEN.md с описанием проекта`. Пишите короткие imperative subject lines с типами `feat:`, `fix:`, `docs:`, `test:` или `refactor:`. В PR добавляйте описание, ссылку на issue или задачу, результат `go test ./...`, а для изменений UI или API - скриншоты либо примеры запросов.
+Base branch для MVP: `v1`. В обычном ручном workflow создавайте рабочие ветки от актуального `v1`: `feature/<short-name>`, `fix/<short-name>`, `test/<short-name>`, `docs/<short-name>` или `chore/<short-name>`. Одна задача - одна ветка и один PR, если изменения не являются явно связанным маленьким follow-up. Не коммитьте напрямую в `v1` без явной договоренности.
+
+История использует краткий Conventional Commit style, например `docs: добавить QWEN.md с описанием проекта`. Пишите короткие imperative subject lines с типами `feat:`, `fix:`, `docs:`, `test:`, `refactor:` или `chore:`. В PR добавляйте описание, ссылку на issue или задачу, результат `go test ./...`, а для изменений UI или API - скриншоты либо примеры запросов. Предпочтительный merge policy для PR - squash merge.
+
+Для локальной AI-agent сессии прямой commit допустим только если пользователь явно попросил закоммитить изменения. Перед commit проверяйте `git status`, добавляйте только просмотренные связанные файлы и не трогайте unrelated changes.
 
 ## Security & Configuration Tips
 

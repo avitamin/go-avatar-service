@@ -10,7 +10,7 @@ Use this template when asking an AI agent to update documentation.
 Контекст:
 - Репозиторий: go-avatar-service
 - Сначала прочитай docs/prompts/context/project.md
-- Источники истины: docs/requirements/confirmed-requirements.md и docs/specs/avatar-service-v1.md
+- Источники истины: docs/requirements/confirmed-requirements.md и docs/specs/01-avatar-service-v1.md
 
 Что обновить:
 {task}

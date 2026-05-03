@@ -139,4 +139,4 @@ Web для MVP:
 ## Связанные документы
 
 - [Исходное ТЗ](assignment.md)
-- [Спека разработки v1](../specs/avatar-service-v1.md)
+- [Спека разработки v1](../specs/01-avatar-service-v1.md)

@@ -13,7 +13,7 @@ Use this prompt when asking an AI agent to implement a feature through TDD.
 Контекст:
 - Сначала прочитай docs/prompts/context/project.md
 - Затем прочитай docs/requirements/confirmed-requirements.md
-- Затем прочитай docs/specs/avatar-service-v1.md
+- Затем прочитай docs/specs/01-avatar-service-v1.md
 - Если задача относится к конкретной роли, прочитай подходящий файл из docs/prompts/agents/
 
 Workflow:
@@ -43,6 +43,8 @@ Workflow:
 5. Verify
    - Запусти целевые тесты.
    - Запусти go test ./..., если это разумно для текущего изменения и окружения.
+   - Опционально запусти make bench или точечный go test -run='^$' -bench=... -benchmem, если изменение затрагивает performance-sensitive paths: image processing, service fallback/list selection, HTTP middleware/router или worker thumbnail generation.
+   - Если benchmark показывает повторяемую регрессию, сними CPU/memory profile для конкретного benchmark через -cpuprofile/-memprofile и проверь top hotspots через go tool pprof.
    - Если проверка требует внешних сервисов и они недоступны, явно укажи это.
 
 6. Report
@@ -51,6 +53,8 @@ Workflow:
      - чем он падал до реализации;
      - что изменено для green;
      - какие проверки запускались.
+   - Если запускались benchmarks, укажи команду и кратко отметь заметные регрессии или их отсутствие.
+   - Если снимались profiles, укажи подозрительный benchmark, метрику регрессии и основной hotspot.
    - Перечисли измененные файлы.
 
 Scope:

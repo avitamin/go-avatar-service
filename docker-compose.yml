@@ -1,0 +1,58 @@
+services:
+  server:
+    build: .
+    command: ["server"]
+    environment:
+      HTTP_ADDR: ":8080"
+      POSTGRES_DSN: "postgres://avatars:avatars@postgres:5432/avatars?sslmode=disable"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: "minioadmin"
+      MINIO_SECRET_KEY: "minioadmin"
+      MINIO_BUCKET: "avatars"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+    ports:
+      - "${COMPOSE_HTTP_PORT:-8080}:8080"
+    depends_on:
+      - postgres
+      - minio
+      - rabbitmq
+
+  worker:
+    build: .
+    command: ["worker"]
+    environment:
+      POSTGRES_DSN: "postgres://avatars:avatars@postgres:5432/avatars?sslmode=disable"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: "minioadmin"
+      MINIO_SECRET_KEY: "minioadmin"
+      MINIO_BUCKET: "avatars"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+    depends_on:
+      - postgres
+      - minio
+      - rabbitmq
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: avatars
+      POSTGRES_USER: avatars
+      POSTGRES_PASSWORD: avatars
+    ports:
+      - "${COMPOSE_POSTGRES_PORT:-5432}:5432"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "${COMPOSE_RABBITMQ_PORT:-5672}:5672"
+      - "${COMPOSE_RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "${COMPOSE_MINIO_API_PORT:-9000}:9000"
+      - "${COMPOSE_MINIO_CONSOLE_PORT:-9001}:9001"

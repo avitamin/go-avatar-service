@@ -10,12 +10,12 @@ Use this prompt when asking an AI agent to implement the MVP of `go-avatar-servi
 Цель:
 Реализовать MVP сервиса "Аватарница" по TDD, опираясь на основные источники истины:
 - docs/requirements/confirmed-requirements.md
-- docs/specs/avatar-service-v1.md
+- docs/specs/01-avatar-service-v1.md
 
 Контекст:
 - Сначала прочитай docs/prompts/context/project.md
 - Затем прочитай docs/requirements/confirmed-requirements.md
-- Затем прочитай docs/specs/avatar-service-v1.md
+- Затем прочитай docs/specs/01-avatar-service-v1.md
 - При работе над HTTP/API читай docs/prompts/agents/backend-implementer.md
 - При работе над worker читай docs/prompts/agents/worker-implementer.md
 - При работе над тестами читай docs/prompts/agents/tester.md
@@ -63,6 +63,8 @@ Use this prompt when asking an AI agent to implement the MVP of `go-avatar-servi
 5. Verify
    - Запусти целевые тесты.
    - Запусти go test ./..., если это разумно для текущего изменения и окружения.
+   - Опционально запусти make bench или точечный go test -run='^$' -bench=... -benchmem, если инкремент затрагивает image processing, service fallback/list selection, HTTP middleware/router или worker thumbnail generation.
+   - Если benchmark показывает повторяемую регрессию, сними CPU/memory profile для конкретного benchmark через -cpuprofile/-memprofile и проверь top hotspots через go tool pprof.
    - Проверь измененные файлы через JetBrains IDE inspections/get_file_problems, если инструмент доступен.
    - Используй shell как fallback для проверки файлов, если JetBrains-инструмент недоступен или не покрывает нужный тип проверки.
    - Если проверка требует внешних сервисов и они недоступны, явно укажи это.
@@ -73,6 +75,8 @@ Use this prompt when asking an AI agent to implement the MVP of `go-avatar-servi
      - чем он падал до реализации;
      - что изменено для green;
      - какие проверки запускались.
+   - Если запускались benchmarks, укажи команду и кратко отметь заметные регрессии или их отсутствие.
+   - Если снимались profiles, укажи подозрительный benchmark, метрику регрессии и основной hotspot.
    - Перечисли измененные файлы.
 
 Инкременты реализации:
@@ -219,6 +223,7 @@ Use this prompt when asking an AI agent to implement the MVP of `go-avatar-servi
      - целевые тесты по измененным пакетам;
      - go test ./...;
      - coverage check для logic-heavy backend packages, если команда уже заведена или легко добавляется.
+     - опционально make bench для performance-sensitive изменений.
    - Если IDE-инструменты недоступны, используй shell-команды как fallback и явно укажи это в отчете.
 
 Acceptance criteria:

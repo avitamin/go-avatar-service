@@ -1,64 +1,82 @@
 # Сервис "Аватарница"
 
-`go-avatar-service` - Go-сервис для управления аватарками пользователей. Репозиторий сейчас находится в состоянии skeleton: есть минимальные entrypoints сервера и worker, базовый web upload UI и документация требований.
+`go-avatar-service` - Go-сервис для управления аватарками пользователей. Текущая реализация закрывает MVP contract smoke на runtime adapters PostgreSQL/MinIO/RabbitMQ и сохраняет локальный in-memory fallback для unit tests и быстрого запуска без внешней инфраструктуры.
 
-## Актуальные источники требований
+## Источники требований
 
 Основные документы для разработки:
 
 - [Подтвержденные требования](docs/requirements/confirmed-requirements.md)
-- [Спека разработки v1](docs/specs/avatar-service-v1.md)
+- [Спека разработки v1](docs/specs/01-avatar-service-v1.md)
 
-Исторический контекст:
+Если README, QWEN.md или исходное ТЗ конфликтуют с подтвержденными требованиями и v1 spec, используйте `confirmed-requirements.md` и `01-avatar-service-v1.md`.
 
-- [Исходное ТЗ](docs/requirements/assignment.md)
-- [QWEN.md](QWEN.md)
+## Рабочие документы
 
-Если README, QWEN.md или исходное ТЗ конфликтуют с подтвержденными требованиями и v1 spec, используйте `confirmed-requirements.md` и `avatar-service-v1.md`.
+- [Навигация по спекам](docs/specs/README.md)
+- [Навигация по планам](docs/plans/README.md)
+- [План перехода миграций на golang-migrate](docs/plans/02-migrations-golang-migrate-plan.md)
+- [Developer workflow](docs/development-workflow.md)
 
 ## Текущее состояние
 
 Сейчас в репозитории есть:
 
-- `cmd/server/main.go` - минимальный HTTP server placeholder на `:8080`.
-- `cmd/worker/main.go` - минимальный worker placeholder с бесконечным loop.
-- `web/static/index.html` - шаблонный upload UI.
-- `go.mod` - модуль `go-avatar-service`, Go `1.25.1`.
-- `docs/` - требования, спека и reusable prompts для AI-агентов.
+- `cmd/avatars-service/main.go` - основной CLI entrypoint: `avatars-service server|worker|migrate`.
+- `cmd/server/main.go` и `cmd/worker/main.go` - compatibility wrappers вокруг нового bootstrap.
+- `cmd/avatar-contract-tests/main.go` - black-box runner контрактных smoke-тестов HTTP API.
+- `internal/domain` - value objects, statuses, user ID и size validation.
+- `internal/http` - Chi router, handlers, JSON error model, access logs, web pages.
+- `internal/service` - application service, selection/fallback, soft delete, in-memory repository/storage для unit tests и fallback-режима без external adapters.
+- `internal/repository/postgres` - PostgreSQL adapter для metadata.
+- `internal/storage/minio` - MinIO adapter для original и thumbnail objects.
+- `internal/broker/rabbitmq` - RabbitMQ publisher/consumer topology для `avatar.uploaded` и `avatar.delete_requested`.
+- `internal/imageproc` - magic bytes sniffing, decode jpeg/png, thumbnail JPEG generation.
+- `internal/worker` - upload/delete handlers, consumer runner, idempotency checks, minimal retry.
+- `internal/app` - CLI/bootstrap policy.
+- `migrations/` - initial SQL schema.
+- `Dockerfile` и `docker-compose.yml` - локальная MVP-инфраструктура.
+- `web/static/index.html` - upload UI, отправляет multipart поле `file`.
+- `tests/contract/` - contract smoke runner и self-tests.
 
-Пока отсутствуют:
+Текущий runtime переключается по env-конфигурации. Если заданы `POSTGRES_DSN`, полный набор `MINIO_*` и `RABBITMQ_URL`, `server` и `worker` используют реальные PostgreSQL/MinIO/RabbitMQ adapters. Если external storage env не задан, bootstrap оставляет in-memory repository/storage fallback для локальных unit-style запусков. `avatars-service migrate up|down|status` использует встроенный `golang-migrate` runner против PostgreSQL и остается отдельным явным operational step. `GET /health` выполняет runtime checks по `postgres`, `minio`, `rabbitmq`; при fallback/noop runtime или недоступности dependency endpoint остается `200`, но возвращает `status=degraded`.
 
-- `internal/` с основной backend-логикой.
-- `migrations/`.
-- `tests/`.
-- `Dockerfile`.
-- `docker-compose.yml`.
-- `Makefile`.
+## CLI
 
-Docker Compose обязателен для MVP по подтвержденным требованиям, но файл compose пока не добавлен. Не используйте `docker-compose up --build` как рабочий сценарий до появления конфигурации в репозитории.
+Основной контракт:
 
-## Планируемый MVP
+```bash
+go run ./cmd/avatars-service server
+go run ./cmd/avatars-service worker
+go run ./cmd/avatars-service migrate up
+go run ./cmd/avatars-service migrate down
+go run ./cmd/avatars-service migrate status
+```
 
-MVP должен реализовать:
+Миграции являются отдельным явным шагом и не запускаются автоматически при старте `server` или `worker`.
 
-- HTTP API на Chi.
-- PostgreSQL для metadata.
-- MinIO для original и thumbnails.
-- RabbitMQ + worker для асинхронной обработки.
-- Soft delete.
-- Upload validation по размеру, MIME и magic bytes.
-- Поддержку `jpeg`, `png`, `webp`, максимум 10 MB.
-- Thumbnails `100x100` и `300x300`, всегда в `jpeg`.
-- Public read endpoints.
-- `X-User-ID` только для изменяющих операций.
-- Единый JSON-формат ошибок.
-- `/health` со статусами `postgres`, `minio`, `rabbitmq`.
-- Access logs.
-- Покрытие `>50%` по backend-пакетам с логикой сервиса и worker.
+`migrate` использует каталог `migrations/` как file source для `golang-migrate`. По умолчанию binary ищет его относительно текущего рабочего каталога, рядом с исполняемым файлом и на уровень выше каталога исполняемого файла. При нестандартном запуске путь можно зафиксировать явно через `MIGRATIONS_DIR=/abs/path/to/migrations`.
+
+`migrate status` читает реальное состояние migration engine, а не наличие таблицы `avatars`. Вывод имеет вид:
+
+```text
+migrate status pending
+migrate status ok version=1 dirty=false
+migrate status dirty version=2
+```
+
+Dirty state выводится явно и не маскируется под `ok`. Команда `status` остается диагностической и завершается успешно; recovery для dirty state в первой итерации выполняется вручную.
+
+Legacy wrappers оставлены временно:
+
+```bash
+go run ./cmd/server
+go run ./cmd/worker
+```
+
+Новый код расширяйте через `cmd/avatars-service` и `internal/app`, а не через legacy entrypoints.
 
 ## API v1
-
-Обязательные API endpoints:
 
 | Method | Path | Назначение |
 | --- | --- | --- |
@@ -69,97 +87,184 @@ MVP должен реализовать:
 | `DELETE` | `/api/v1/users/{user_id}/avatar` | Soft delete последней неудаленной записи пользователя с доступным original |
 | `GET` | `/api/v1/avatars/{avatar_id}/metadata` | Metadata записи |
 | `GET` | `/api/v1/users/{user_id}/avatars` | Список неудаленных аватарок пользователя |
-| `GET` | `/health` | Healthcheck зависимостей |
+| `GET` | `/health` | Healthcheck компонентов |
 
-Поддерживаемый query parameter для file endpoints:
+Поддерживаемый `size`:
 
-- `size=original`
-- `size=100x100`
-- `size=300x300`
+- `original`
+- `100x100`
+- `300x300`
 
-Без `size` возвращается `original`. Параметр `format` в MVP не поддерживается.
+Без `size` возвращается `original`. Query parameter `format` в MVP не поддерживается и возвращает `400`.
+
+`/health` возвращает top-level `status` и nested `components`:
+
+```json
+{
+  "status": "ok",
+  "components": {
+    "postgres": "ok",
+    "minio": "ok",
+    "rabbitmq": "ok"
+  }
+}
+```
+
+Допустимые значения статусов: `ok`, `degraded`. При частичной деградации или fallback/noop adapters HTTP status остается `200`, а проблемный компонент и общий `status` становятся `degraded`.
+
+Read endpoints публичные. `X-User-ID` обязателен только для изменяющих операций. Ошибки возвращаются в едином JSON shape:
+
+```json
+{
+  "error": {
+    "code": "invalid_size",
+    "message": "Unsupported size"
+  }
+}
+```
 
 ## Web
 
-Обязательные web endpoints для MVP:
+Обязательные web endpoints:
 
 - `GET /web/upload`
 - `GET /web/gallery/{user_id}`
 
-Upload из web должен идти напрямую в `POST /api/v1/avatars`. Отдельный `POST /web/upload` не нужен. Пользователь вводит `user_id` в форме.
+Upload из web идет напрямую в `POST /api/v1/avatars`; отдельный `POST /web/upload` не нужен. Форма использует multipart поле `file`.
 
-Текущий файл `web/static/index.html` - стартовый шаблон upload UI. Важно: в текущем skeleton он может не полностью совпадать с финальным API-контрактом, поэтому при реализации сверяйте форму с v1 spec и confirmed requirements.
+Галерея показывает только записи с доступным `original`, без удаления. API list и web gallery намеренно не смешиваются: API list показывает failed записи, web gallery фильтрует по доступному original.
+
+## Локальная разработка
+
+```bash
+go test ./...
+make run-server
+make contract-tests
+make docker-up-detached
+docker compose run --rm server migrate up
+make docker-contract-tests
+```
+
+- `make run-server` использует `HTTP_ADDR=:18080` по умолчанию.
+- `make contract-tests` использует `BASE_URL=http://localhost:18080` по умолчанию.
+- Docker Compose публикует server на `http://localhost:8080`.
+
+Полный developer workflow, `.env` overrides, shared JetBrains run configurations и скрипт подбора свободных портов вынесены в [docs/development-workflow.md](docs/development-workflow.md).
 
 ## Проектная структура
-
-Текущая структура:
 
 ```text
 .
 ├── cmd/
+│   ├── avatars-service/
 │   ├── server/
-│   │   └── main.go
+│   ├── worker/
+│   └── avatar-contract-tests/
+├── internal/
+│   ├── app/
+│   ├── domain/
+│   ├── http/
+│   ├── imageproc/
+│   ├── repository/
+│   │   └── postgres/
+│   ├── service/
+│   ├── storage/
+│   │   └── minio/
+│   ├── broker/
+│   │   └── rabbitmq/
 │   └── worker/
-│       └── main.go
-├── docs/
+├── migrations/
+├── tests/
+│   └── contract/
 ├── web/
 │   └── static/
-│       └── index.html
+├── Dockerfile
+├── docker-compose.yml
 ├── go.mod
-├── README.md
-└── QWEN.md
+└── Makefile
 ```
 
-Целевая структура по v1 spec предпочитает один binary с subcommands:
-
-```bash
-avatars-service server
-avatars-service worker
-avatars-service migrate up
-avatars-service migrate down
-avatars-service migrate status
-```
-
-Для приватной логики используйте `internal/`:
-
-- `internal/http`
-- `internal/service`
-- `internal/repository`
-- `internal/storage`
-- `internal/broker`
-- `internal/domain`
-- `internal/config`
-- `internal/worker`
-- `internal/imageproc`
+Новые external adapters размещайте по v1 spec. Текущие PostgreSQL, MinIO и RabbitMQ adapters уже находятся в `internal/repository/postgres`, `internal/storage/minio` и `internal/broker/rabbitmq`. Конфигурация пока читается в `internal/app`; при росте bootstrap-логики ее стоит вынести в `internal/config`.
 
 `pkg/` добавляйте только при появлении реального public reusable API.
 
-## Локальная разработка
+## Тестирование и покрытие
 
-Доступные сейчас команды:
+Разработка ведется через TDD: сначала focused failing test, затем минимальная реализация, затем refactor.
+
+Текущие проверки:
 
 ```bash
-go mod tidy
-go run ./cmd/server
-go run ./cmd/worker
-go build -o ./bin/server ./cmd/server
-go build -o ./bin/worker ./cmd/worker
 go test ./...
+go test ./internal/... -cover
 ```
 
-`go test ./...` сейчас проверяет только существующий skeleton, пока тесты не добавлены.
+Backend-пакеты с логикой сервиса и worker должны держать покрытие выше 50%. Coverage не заменяет requirement coverage: обязательное поведение из confirmed requirements/v1 spec должно иметь явный тест или documented gap.
 
-## Подход к разработке
+## Benchmarking
 
-- Перед реализацией, ревью и тестированием AI-агенты должны читать `docs/prompts/README.md` и `docs/prompts/context/project.md`.
-- Разработка ведется через TDD: сначала тест ожидаемого поведения, затем минимальная реализация, затем refactor при зеленых тестах.
-- Go-код форматируется через `gofmt`.
-- HTTP-обработчики должны оставаться тонкими, бизнес-логика - в service layer, доступ к данным - в repository/storage/broker adapters.
-- Миграции выполняются отдельным явным шагом и не запускаются автоматически при старте server/worker.
+Локальный benchmark workflow описан в [docs/benchmarking.md](docs/benchmarking.md).
+
+Основная команда:
+
+```bash
+make bench
+```
+
+Она запускает:
+
+```bash
+go test -run='^$' -bench=. -benchmem ./...
+```
+
+Бенчмарки покрывают domain validation, image processing, service fallback/list paths, HTTP router paths, worker thumbnail generation, а также opt-in PostgreSQL/RabbitMQ adapter paths.
+
+External adapters запускаются отдельно, если подняты сервисы и заданы env:
+
+```bash
+POSTGRES_DSN='postgres://avatars:avatars@localhost:5432/avatars?sslmode=disable' \
+RABBITMQ_URL='amqp://guest:guest@localhost:5672/' \
+make bench-external
+```
+
+Запускайте benchmarks опционально для изменений, которые могут повлиять на CPU, allocations или latency hot paths; для обычных изменений обязательной проверкой остается `go test ./...`.
+
+## Git Workflow
+
+Base branch для MVP: `v1`.
+
+Обычный порядок работы:
+
+```bash
+git checkout v1
+git pull --ff-only
+git checkout -b feature/<short-name>
+```
+
+Типы рабочих веток:
+
+- `feature/<short-name>` - новая функциональность.
+- `fix/<short-name>` - исправление поведения или багов.
+- `test/<short-name>` - тесты без production changes.
+- `docs/<short-name>` - документация и contributor guidance.
+- `chore/<short-name>` - инфраструктура, локальные run configs, Makefile, housekeeping.
+
+Правила:
+
+- Одна задача - одна рабочая ветка и один PR, если изменения не являются явно связанным маленьким follow-up.
+- Не коммитьте напрямую в `v1` в обычном ручном workflow; открывайте PR в `v1`.
+- Перед PR запустите `go test ./...`.
+- Для API/web изменений дополнительно запустите contract smoke: `make run-server` в одном терминале и `make contract-tests` в другом.
+- Для изменений Docker/миграций укажите в PR, какие внешние сервисы нужны для проверки.
+- Commit message пишите в текущем стиле истории: `feat: ...`, `fix: ...`, `docs: ...`, `test: ...`, `refactor: ...`, `chore: ...`.
+- Предпочтительный merge policy для PR: squash merge, чтобы история `v1` оставалась короткой и читаемой.
+
+Для локальной AI-agent сессии прямой commit допустим только если пользователь явно попросил закоммитить изменения. В этом случае агент сначала проверяет `git status`, коммитит только просмотренные связанные файлы и не трогает unrelated changes.
 
 ## Безопасность и конфигурация
 
 - Не коммитьте `.env`, секреты, загруженные аватары и бинарники из `bin/`.
-- Конфигурацию изолируйте в `internal/config`.
-- Для upload проверяйте размер, content type, magic bytes и storage path до сохранения.
-- Read endpoints публичные по требованиям MVP, поэтому в дальнейшем может понадобиться rate limiting, но он не входит в обязательный MVP.
+- Read endpoints публичные по требованиям MVP.
+- Upload validation должна проверять размер, magic bytes и декодирование изображения без доверия клиентскому `Content-Type`.
+- Физическое удаление файлов выполняет только worker после soft delete.
+- Access logs не должны логировать тело запроса, секреты и содержимое uploaded files.

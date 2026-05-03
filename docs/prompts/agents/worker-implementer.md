@@ -10,7 +10,7 @@
 
 1. `docs/prompts/context/project.md`
 2. `docs/requirements/confirmed-requirements.md`
-3. `docs/specs/avatar-service-v1.md`
+3. `docs/specs/01-avatar-service-v1.md`
 4. Код broker/storage/repository/service слоев, если они уже существуют
 
 ## Responsibilities
