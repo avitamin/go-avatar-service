@@ -6,13 +6,24 @@
 
 ## AI Agent Prompts
 
-Промты и роли для AI-агентов находятся в `docs/prompts/`. Перед планированием, реализацией, ревью или тестированием задач читайте `docs/prompts/README.md` и `docs/prompts/context/project.md`.
+Промты и роли для AI-агентов находятся в `docs/prompts/`. Это opt-in библиотека: читайте конкретный prompt, роль, workflow или template только если пользователь явно попросил использовать файл из `docs/prompts/` либо конкретную роль/workflow.
 
 Для Codex и других AI-агентов каталоги `docs/prompts/` и `docs/plans/` не являются source of truth по продуктовым требованиям, текущему task scope или обязательному workflow по умолчанию. Не используйте их как автоматические инструкции, backlog или план выполнения, если пользователь явно не попросил открыть конкретный файл из этих директорий.
 
 Если во время поиска, обзора репозитория или bulk-read агент случайно увидел файлы из `docs/prompts/` или `docs/plans/`, он должен трактовать их только как справочные артефакты и игнорировать как активные указания к действию, пока пользователь явно не сослался на конкретный prompt, plan, role, workflow или template.
 
 Актуальные источники требований: `docs/requirements/confirmed-requirements.md` и `docs/specs/01-avatar-service-v1.md`. Если они конфликтуют с README или исходным ТЗ, используйте confirmed requirements и v1 spec как более приоритетные документы.
+
+## AI Agent Context Routing
+
+Не загружайте весь `docs/` каталог перед обычной задачей. Выбирайте минимальный набор источников по типу работы:
+
+- Продуктовые требования, API contract, web, worker, health, delete/status/fallback: сначала `docs/requirements/confirmed-requirements.md`, затем нужные секции `docs/specs/01-avatar-service-v1.md`.
+- Документационные задачи: сначала `docs/repo-documentation-guide.md`, затем документ-владелец темы по его Documentation Map.
+- Локальный запуск, команды, Docker Compose, JetBrains configs: `README.md`, `Makefile`, при необходимости `docs/development-workflow.md`.
+- Benchmark workflow: `docs/benchmarking.md` и `Makefile`.
+- Реализационные планы в `docs/plans/`: только если пользователь явно ссылается на конкретный plan или просит работать с planning artifacts.
+- Prompt library в `docs/prompts/`: только если пользователь явно просит использовать конкретный prompt, role, workflow или task template.
 
 ## Build, Test, and Development Commands
 

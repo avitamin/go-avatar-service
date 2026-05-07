@@ -55,6 +55,12 @@
 | Репозиторные правила по документации | `docs/repo-documentation-guide.md` | Source priority, ownership, verification matrix, indexing policy |
 | Быстрый обзор репозитория и запуск проекта | `README.md` | Краткая навигация, команды, high-level state без deep spec details |
 
+Правило одного владельца:
+
+- Каждая устойчивая тема должна иметь один документ-владелец из таблицы выше.
+- Остальные документы должны ссылаться на владельца и хранить только свою локальную дельту, а не пересказывать полный contract, архитектуру или runtime-карту.
+- Для agent-facing документов особенно важно не дублировать `README.md`, confirmed requirements и v1 spec: дубли увеличивают стартовый контекст и быстро устаревают.
+
 Темы, которые нужно подтверждать кодом, а не только docs:
 
 - CLI subcommands и compatibility wrappers: `cmd/avatars-service`, `cmd/server`, `cmd/worker`
