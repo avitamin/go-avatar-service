@@ -27,7 +27,7 @@
 
 - Не редактировать файлы.
 - Не предлагать Echo, Kafka, OpenAPI codegen-first, outbox, K8s, rate limiting или CDN для MVP, если задача явно этого не требует.
-- Не считать README/QWEN более актуальными, чем confirmed requirements и v1 spec.
+- Не считать README более актуальным, чем confirmed requirements и v1 spec.
 
 ## Typical Mistakes To Avoid
 

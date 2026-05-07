@@ -32,14 +32,13 @@
 
 - `docs/requirements/assignment.md`
 - `README.md`
-- `QWEN.md`
 
 Если документы конфликтуют, приоритет такой:
 
 1. `docs/requirements/confirmed-requirements.md`
 2. `docs/specs/01-avatar-service-v1.md`
 3. `docs/requirements/assignment.md`
-4. `README.md` и `QWEN.md`
+4. `README.md`
 
 ## Role Prompts
 

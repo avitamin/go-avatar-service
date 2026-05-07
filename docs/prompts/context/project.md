@@ -48,14 +48,14 @@
 2. `docs/specs/01-avatar-service-v1.md`
 
 `docs/requirements/assignment.md` содержит исходное ТЗ и может конфликтовать с подтвержденными требованиями.
-`README.md` и `QWEN.md` местами описывают шаблонное или устаревшее состояние.
+`README.md` может описывать более краткое или обзорное состояние.
 
 ## Important Known Differences
 
 - Frontend уже отправляет multipart поле `file`, как требует API contract.
 - Текущая структура имеет основной `cmd/avatars-service`; `cmd/server` и `cmd/worker` оставлены только как compatibility wrappers.
 - Docker Compose поднимает PostgreSQL, MinIO, RabbitMQ, server и worker; перед server/worker нужен явный migration step.
-- README/QWEN обновлены под текущее состояние; если они снова разойдутся с confirmed requirements/v1 spec, приоритет остается за confirmed requirements/v1 spec.
+- Если README разойдется с confirmed requirements/v1 spec, приоритет остается за confirmed requirements/v1 spec.
 - Исходное ТЗ допускает Echo или Chi, RabbitMQ или Kafka; confirmed requirements фиксируют Chi и RabbitMQ.
 - Исходное ТЗ упоминает `POST /web/upload`; confirmed requirements и v1 spec говорят, что отдельный `POST /web/upload` не нужен.
 

@@ -32,12 +32,11 @@
 4. Точечные спецификации в `docs/specs/`, если они не конфликтуют с пунктами выше.
 5. Реализационные планы в `docs/plans/`, если они не конфликтуют с пунктами выше.
 6. `README.md`
-7. `QWEN.md`
-8. `docs/requirements/assignment.md` только как исторический контекст.
+7. `docs/requirements/assignment.md` только как исторический контекст.
 
 Правило разрешения конфликтов:
 
-- Если `README.md`, `QWEN.md` или `assignment.md` расходятся с confirmed requirements и v1 spec, правьте документацию по confirmed requirements и v1 spec.
+- Если `README.md` или `assignment.md` расходятся с confirmed requirements и v1 spec, правьте документацию по confirmed requirements и v1 spec.
 - Если requirements/spec и код расходятся, не маскируйте это. Зафиксируйте расхождение в документе или финальном отчете и укажите, что именно подтверждено кодом, а что остается целевым состоянием.
 
 ## Documentation Map
@@ -52,6 +51,7 @@
 | Implementation plans и rollout-планы | `docs/plans/*.md` кроме `docs/plans/README.md` | Порядок внедрения, риски, verification steps, phased execution |
 | Benchmark workflow | `docs/benchmarking.md` | Когда и как запускать benchmarks, triage matrix |
 | Reusable prompts и task templates для AI-агентов | `docs/prompts/**` | Роли, workflow prompts, task templates, project context |
+| Repo-level AI-agent и contributor guidance | `AGENTS.md` | Правила для AI-агентов, contributor workflow, build/test commands, commit/PR guidance |
 | Репозиторные правила по документации | `docs/repo-documentation-guide.md` | Source priority, ownership, verification matrix, indexing policy |
 | Быстрый обзор репозитория и запуск проекта | `README.md` | Краткая навигация, команды, high-level state без deep spec details |
 
@@ -96,7 +96,7 @@
 | Worker, broker, async processing | queue topics, retry/idempotency, delete flow | `docs/requirements/confirmed-requirements.md`, `docs/specs/01-avatar-service-v1.md`, `internal/broker/rabbitmq`, `internal/worker` |
 | Storage/repository adapters | PostgreSQL/MinIO usage vs in-memory fallback | `internal/app`, `internal/repository/postgres`, `internal/storage/minio`, `README.md` |
 | Test and benchmark docs | actual commands, coverage notes, benchmark targets | `Makefile`, `docs/benchmarking.md`, `go.mod`, `tests/contract/` |
-| AI-agent prompts/process | prompt entrypoints and safe usage rules | `docs/prompts/README.md`, `docs/prompts/context/project.md`, `docs/prompts/**` |
+| AI-agent prompts/process | prompt entrypoints, safe usage rules, repo-level agent guidance | `AGENTS.md`, `docs/prompts/README.md`, `docs/prompts/context/project.md`, `docs/prompts/**` |
 
 Минимальная проверка для любой docs-правки:
 

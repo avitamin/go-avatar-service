@@ -19,8 +19,8 @@ Use this prompt when asking an AI agent to implement a feature through TDD.
 Workflow:
 1. Explore
    - Найди существующие entrypoints, интерфейсы, тесты и соседний код.
-   - Зафиксируй фактическое состояние репозитория, не полагайся только на README/QWEN.
-   - Если confirmed requirements или v1 spec конфликтуют с README/QWEN, следуй confirmed requirements и v1 spec.
+   - Зафиксируй фактическое состояние репозитория, не полагайся только на README.
+   - Если confirmed requirements или v1 spec конфликтуют с README, следуй confirmed requirements и v1 spec.
 
 2. Test first
    - Сформулируй ожидаемое поведение в focused test до production changes.

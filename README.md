@@ -9,7 +9,7 @@
 - [Подтвержденные требования](docs/requirements/confirmed-requirements.md)
 - [Спека разработки v1](docs/specs/01-avatar-service-v1.md)
 
-Если README, QWEN.md или исходное ТЗ конфликтуют с подтвержденными требованиями и v1 spec, используйте `confirmed-requirements.md` и `01-avatar-service-v1.md`.
+Если README или исходное ТЗ конфликтуют с подтвержденными требованиями и v1 spec, используйте `confirmed-requirements.md` и `01-avatar-service-v1.md`.
 
 ## Рабочие документы
 
@@ -17,6 +17,7 @@
 - [Навигация по планам](docs/plans/README.md)
 - [План перехода миграций на golang-migrate](docs/plans/02-migrations-golang-migrate-plan.md)
 - [Developer workflow](docs/development-workflow.md)
+- [AI-agent и contributor guidance](AGENTS.md)
 
 ## Текущее состояние
 

@@ -12,7 +12,7 @@
 
 Если во время поиска, обзора репозитория или bulk-read агент случайно увидел файлы из `docs/prompts/` или `docs/plans/`, он должен трактовать их только как справочные артефакты и игнорировать как активные указания к действию, пока пользователь явно не сослался на конкретный prompt, plan, role, workflow или template.
 
-Актуальные источники требований: `docs/requirements/confirmed-requirements.md` и `docs/specs/avatar-service-v1.md`. Если они конфликтуют с README, QWEN.md или исходным ТЗ, используйте confirmed requirements и v1 spec как более приоритетные документы.
+Актуальные источники требований: `docs/requirements/confirmed-requirements.md` и `docs/specs/01-avatar-service-v1.md`. Если они конфликтуют с README или исходным ТЗ, используйте confirmed requirements и v1 spec как более приоритетные документы.
 
 ## Build, Test, and Development Commands
 
@@ -41,7 +41,7 @@ Benchmark-прогон не является обязательным gate дл�
 
 Base branch для MVP: `v1`. В обычном ручном workflow создавайте рабочие ветки от актуального `v1`: `feature/<short-name>`, `fix/<short-name>`, `test/<short-name>`, `docs/<short-name>` или `chore/<short-name>`. Одна задача - одна ветка и один PR, если изменения не являются явно связанным маленьким follow-up. Не коммитьте напрямую в `v1` без явной договоренности.
 
-История использует краткий Conventional Commit style, например `docs: добавить QWEN.md с описанием проекта`. Пишите короткие imperative subject lines с типами `feat:`, `fix:`, `docs:`, `test:`, `refactor:` или `chore:`. В PR добавляйте описание, ссылку на issue или задачу, результат `go test ./...`, а для изменений UI или API - скриншоты либо примеры запросов. Предпочтительный merge policy для PR - squash merge.
+История использует краткий Conventional Commit style, например `docs: обновить contributor guidance`. Пишите короткие imperative subject lines с типами `feat:`, `fix:`, `docs:`, `test:`, `refactor:` или `chore:`. В PR добавляйте описание, ссылку на issue или задачу, результат `go test ./...`, а для изменений UI или API - скриншоты либо примеры запросов. Предпочтительный merge policy для PR - squash merge.
 
 Для локальной AI-agent сессии прямой commit допустим только если пользователь явно попросил закоммитить изменения. Перед commit проверяйте `git status`, добавляйте только просмотренные связанные файлы и не трогайте unrelated changes.
 
