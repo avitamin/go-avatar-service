@@ -28,6 +28,7 @@
 - `cmd/avatar-contract-tests/main.go` - black-box runner контрактных smoke-тестов HTTP API.
 - `internal/domain` - value objects, statuses, user ID и size validation.
 - `internal/http` - Chi router, handlers, JSON error model, access logs, web pages.
+- `internal/observability` - JSON `slog` wiring, OpenTelemetry tracing setup, Prometheus collectors and HTTP middleware.
 - `internal/service` - application service, selection/fallback, soft delete, in-memory repository/storage для unit tests и fallback-режима без external adapters.
 - `internal/repository/postgres` - PostgreSQL adapter для metadata.
 - `internal/storage/minio` - MinIO adapter для original и thumbnail objects.
@@ -41,6 +42,14 @@
 - `tests/contract/` - contract smoke runner и self-tests.
 
 Текущий runtime переключается по env-конфигурации. Если заданы `POSTGRES_DSN`, полный набор `MINIO_*` и `RABBITMQ_URL`, `server` и `worker` используют реальные PostgreSQL/MinIO/RabbitMQ adapters. Если external storage env не задан, bootstrap оставляет in-memory repository/storage fallback для локальных unit-style запусков. `avatars-service migrate up|down|status` использует встроенный `golang-migrate` runner против PostgreSQL и остается отдельным явным operational step. `GET /health` выполняет runtime checks по `postgres`, `minio`, `rabbitmq`; при fallback/noop runtime или недоступности dependency endpoint остается `200`, но возвращает `status=degraded`.
+
+Observability включен в runtime:
+
+- JSON logs пишутся в stdout через `slog` и содержат `service`, `component`, `trace_id`, `span_id`, а при наличии заголовка - `request_id`.
+- `GET /metrics` на server отдает Prometheus application metrics.
+- HTTP metrics используют route templates, например `/api/v1/avatars/{avatar_id}`, без raw `avatar_id`/`user_id` в labels.
+- OpenTelemetry traces создаются локально всегда при `OTEL_TRACES_ENABLED=true`; если `OTEL_EXPORTER_OTLP_ENDPOINT` пустой, используется noop/exporter-free provider.
+- RabbitMQ publish/consume переносит W3C trace context через AMQP headers, поэтому worker logs можно связать с исходным HTTP request по `trace_id`.
 
 ## CLI
 
@@ -89,6 +98,7 @@ go run ./cmd/worker
 | `GET` | `/api/v1/avatars/{avatar_id}/metadata` | Metadata записи |
 | `GET` | `/api/v1/users/{user_id}/avatars` | Список неудаленных аватарок пользователя |
 | `GET` | `/health` | Healthcheck компонентов |
+| `GET` | `/metrics` | Prometheus metrics для server process |
 
 Поддерживаемый `size`:
 
@@ -150,6 +160,14 @@ make docker-contract-tests
 - `make contract-tests` использует `BASE_URL=http://localhost:18080` по умолчанию.
 - Docker Compose публикует server на `http://localhost:8080`.
 
+Быстрая проверка observability после запуска:
+
+```bash
+curl -fsS http://localhost:18080/health
+curl -fsS http://localhost:18080/metrics
+curl -fsS -H 'X-Request-ID: manual-check' http://localhost:18080/health
+```
+
 Полный developer workflow, `.env` overrides, shared JetBrains run configurations и скрипт подбора свободных портов вынесены в [docs/development-workflow.md](docs/development-workflow.md).
 
 ## Проектная структура
@@ -166,6 +184,7 @@ make docker-contract-tests
 │   ├── domain/
 │   ├── http/
 │   ├── imageproc/
+│   ├── observability/
 │   ├── repository/
 │   │   └── postgres/
 │   ├── service/
@@ -269,3 +288,4 @@ git checkout -b feature/<short-name>
 - Upload validation должна проверять размер, magic bytes и декодирование изображения без доверия клиентскому `Content-Type`.
 - Физическое удаление файлов выполняет только worker после soft delete.
 - Access logs не должны логировать тело запроса, секреты и содержимое uploaded files.
+- Metrics labels не должны включать high-cardinality значения вроде `user_id` и `avatar_id`.

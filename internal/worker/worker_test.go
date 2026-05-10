@@ -7,9 +7,13 @@ import (
 	"image/color"
 	"image/jpeg"
 	"log/slog"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"go-avatar-service/internal/domain"
+	"go-avatar-service/internal/observability"
 	"go-avatar-service/internal/service"
 )
 
@@ -149,6 +153,43 @@ func TestRunnerNacksHandlerErrors(t *testing.T) {
 	}
 	if !nacked {
 		t.Fatal("handler error must nack with requeue")
+	}
+}
+
+func TestRunnerObservabilityExtractsTraceAndCountsMessages(t *testing.T) {
+	ctx := context.Background()
+	reg := prometheus.NewRegistry()
+	metrics := observability.NewMetrics(reg)
+	deliveries := make(chan Delivery, 1)
+	consumer := &stubConsumer{deliveries: deliveries}
+	deliveries <- Delivery{
+		RoutingKey: RoutingKeyUploaded,
+		Body:       nil,
+		Headers: map[string]any{
+			"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+		},
+		Nack: func(requeue bool) error { return nil },
+	}
+	close(deliveries)
+
+	var logs bytes.Buffer
+	runner := NewRunner(
+		consumer,
+		NewUploadHandler(service.NewMemoryRepository(), service.NewMemoryStorage(), slog.New(slog.NewJSONHandler(&logs, nil))),
+		NewDeleteHandler(service.NewMemoryRepository(), service.NewMemoryStorage(), slog.New(slog.NewJSONHandler(&logs, nil))),
+		slog.New(slog.NewJSONHandler(&logs, nil)),
+		WithObservability(metrics),
+	)
+	if err := runner.Run(ctx); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !bytes.Contains(logs.Bytes(), []byte(`"trace_id":"4bf92f3577b34da6a3ce929d0e0e4736"`)) {
+		t.Fatalf("worker logs missing extracted trace id: %s", logs.String())
+	}
+	rr := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/metrics", nil))
+	if !bytes.Contains(rr.Body.Bytes(), []byte(`avatar_worker_messages_total{routing_key="avatar.uploaded",status="error"} 1`)) {
+		t.Fatalf("worker metric missing:\n%s", rr.Body.String())
 	}
 }
 

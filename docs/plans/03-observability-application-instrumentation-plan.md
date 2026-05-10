@@ -1,5 +1,28 @@
 # Инструментирование observability в приложении
 
+## Статус реализации
+
+Статус: реализовано в коде приложения.
+
+Подтверждено:
+
+- `internal/observability` содержит runtime wiring для JSON logs, OpenTelemetry tracing, Prometheus collectors и HTTP middleware.
+- Server отдает Prometheus metrics через `GET /metrics`.
+- Worker может поднять отдельный metrics endpoint, если задан `METRICS_ADDR`.
+- HTTP metrics используют route templates и не включают raw `avatar_id`/`user_id` в labels.
+- RabbitMQ publish/consume переносит W3C trace context через AMQP headers.
+- Server и worker пишут JSON logs с `trace_id`, `span_id`, `service`, `component`; `request_id` берется из `X-Request-ID` или `X-Correlation-ID`.
+- PostgreSQL, MinIO и RabbitMQ adapters пишут dependency metrics и spans.
+
+Проверки, выполненные после реализации:
+
+- `go test ./...`
+- `docker compose up -d --build server worker`
+- `BASE_URL=http://127.0.0.1:8081 make contract-tests`
+- ручная проверка `GET /health`, `GET /metrics`, JSON logs и trace correlation через RabbitMQ.
+
+Ограничение текущего `docker-compose.yml`: worker metrics endpoint не публикуется по умолчанию, потому что `METRICS_ADDR` не задан в compose service. Код поддерживает этот режим при явной настройке env и port mapping.
+
 ## Источники и контекст
 
 - Текущее приложение: `internal/app`, `internal/http`, `internal/service`, `internal/repository/postgres`, `internal/storage/minio`, `internal/broker/rabbitmq`, `internal/worker`.

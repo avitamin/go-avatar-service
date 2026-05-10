@@ -13,7 +13,13 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"go-avatar-service/internal/domain"
+	"go-avatar-service/internal/observability"
 )
 
 var (
@@ -76,13 +82,24 @@ type AvatarService struct {
 	broker  Broker
 	now     func() time.Time
 	nextID  func() string
+	metrics *observability.Metrics
+}
+
+// Option customizes AvatarService wiring.
+type Option func(*AvatarService)
+
+// WithObservability configures service-level metrics and traces.
+func WithObservability(metrics *observability.Metrics) Option {
+	return func(s *AvatarService) {
+		s.metrics = metrics
+	}
 }
 
 // NewAvatarService creates an AvatarService with the provided ports.
-func NewAvatarService(repo Repository, storage Storage, broker Broker) *AvatarService {
+func NewAvatarService(repo Repository, storage Storage, broker Broker, opts ...Option) *AvatarService {
 	var mu sync.Mutex
 	seq := 0
-	return &AvatarService{
+	svc := &AvatarService{
 		repo:    repo,
 		storage: storage,
 		broker:  broker,
@@ -98,6 +115,10 @@ func NewAvatarService(repo Repository, storage Storage, broker Broker) *AvatarSe
 			return fmt.Sprintf("avatar-%d", seq)
 		},
 	}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 func randomAvatarID() (string, error) {
@@ -110,10 +131,22 @@ func randomAvatarID() (string, error) {
 
 // Upload stores the original image, creates metadata, and emits a worker event.
 func (s *AvatarService) Upload(ctx context.Context, in UploadInput) (AvatarDTO, error) {
+	start := time.Now()
+	ctx, span := otel.Tracer("avatar-service/service").Start(ctx, "AvatarService.Upload")
+	defer span.End()
+	span.SetAttributes(attribute.String("user_id", in.UserID), attribute.String("file_name", in.FileName), attribute.Int("file_size", len(in.Content)), attribute.String("mime_type", in.ContentType))
+	status := "success"
+	defer func() {
+		s.metrics.ObserveAvatarUpload(status, in.ContentType, time.Since(start))
+		s.metrics.SetStorageBytes("original", int64(len(in.Content)))
+	}()
 	if err := domain.ValidateUserID(in.UserID); err != nil {
+		status = "error"
+		recordSpanError(span, err)
 		return AvatarDTO{}, err
 	}
 	id := s.nextID()
+	span.SetAttributes(attribute.String("avatar_id", id))
 	now := s.now().UTC()
 	ext := extForMime(in.ContentType)
 	key := fmt.Sprintf("avatars/%s/original%s", id, ext)
@@ -130,13 +163,19 @@ func (s *AvatarService) Upload(ctx context.Context, in UploadInput) (AvatarDTO, 
 		UpdatedAt:         now,
 	}
 	if err := s.storage.Put(ctx, key, in.Content, in.ContentType); err != nil {
+		status = "error"
+		recordSpanError(span, err)
 		return AvatarDTO{}, err
 	}
 	if err := s.repo.Create(ctx, a); err != nil {
+		status = "error"
+		recordSpanError(span, err)
 		return AvatarDTO{}, err
 	}
 	if s.broker != nil {
 		if err := s.broker.Publish(ctx, "avatar.uploaded", []byte(id), id); err != nil {
+			status = "publish_failed"
+			recordSpanError(span, err)
 			_ = s.repo.MarkPublishFailed(ctx, id)
 			a.Status = domain.StatusFailed
 		}
@@ -146,25 +185,38 @@ func (s *AvatarService) Upload(ctx context.Context, in UploadInput) (AvatarDTO, 
 
 // ReadAvatar returns the bytes and MIME type for a specific avatar variant.
 func (s *AvatarService) ReadAvatar(ctx context.Context, id string, size domain.Size) ([]byte, string, error) {
+	ctx, span := otel.Tracer("avatar-service/service").Start(ctx, "AvatarService.ReadAvatar")
+	defer span.End()
+	span.SetAttributes(attribute.String("avatar_id", id), attribute.String("size", string(size)))
 	a, err := s.repo.GetActiveByID(ctx, id)
 	if err != nil {
+		recordSpanError(span, err)
 		return nil, "", err
 	}
 	key, ok := a.VariantKey(size)
 	if !ok {
+		recordSpanError(span, ErrVariantNotReady)
 		return nil, "", ErrVariantNotReady
 	}
 	data, mime, err := s.storage.Get(ctx, key)
 	if errors.Is(err, ErrObjectNotFound) {
+		recordSpanError(span, ErrObjectNotFound)
 		return nil, "", ErrObjectNotFound
+	}
+	if err != nil {
+		recordSpanError(span, err)
 	}
 	return data, mime, err
 }
 
 // Metadata returns API metadata for a single avatar.
 func (s *AvatarService) Metadata(ctx context.Context, id string) (AvatarDTO, error) {
+	ctx, span := otel.Tracer("avatar-service/service").Start(ctx, "AvatarService.Metadata")
+	defer span.End()
+	span.SetAttributes(attribute.String("avatar_id", id))
 	a, err := s.repo.GetActiveByID(ctx, id)
 	if err != nil {
+		recordSpanError(span, err)
 		return AvatarDTO{}, err
 	}
 	out := dto(*a)
@@ -182,11 +234,16 @@ func (s *AvatarService) Metadata(ctx context.Context, id string) (AvatarDTO, err
 
 // ListByUser returns active avatars for a user ordered by creation time.
 func (s *AvatarService) ListByUser(ctx context.Context, userID string) ([]AvatarDTO, error) {
+	ctx, span := otel.Tracer("avatar-service/service").Start(ctx, "AvatarService.ListByUser")
+	defer span.End()
+	span.SetAttributes(attribute.String("user_id", userID))
 	if err := domain.ValidateUserID(userID); err != nil {
+		recordSpanError(span, err)
 		return nil, err
 	}
 	items, err := s.repo.ListActiveByUser(ctx, userID)
 	if err != nil {
+		recordSpanError(span, err)
 		return nil, err
 	}
 	out := make([]AvatarDTO, 0, len(items))
@@ -198,11 +255,16 @@ func (s *AvatarService) ListByUser(ctx context.Context, userID string) ([]Avatar
 
 // ReadUserAvatar returns the newest available avatar variant for a user.
 func (s *AvatarService) ReadUserAvatar(ctx context.Context, userID string, size domain.Size) ([]byte, AvatarDTO, error) {
+	ctx, span := otel.Tracer("avatar-service/service").Start(ctx, "AvatarService.ReadUserAvatar")
+	defer span.End()
+	span.SetAttributes(attribute.String("user_id", userID), attribute.String("size", string(size)))
 	if err := domain.ValidateUserID(userID); err != nil {
+		recordSpanError(span, err)
 		return nil, AvatarDTO{}, err
 	}
 	items, err := s.repo.ListActiveByUser(ctx, userID)
 	if err != nil {
+		recordSpanError(span, err)
 		return nil, AvatarDTO{}, err
 	}
 	for _, a := range items {
@@ -218,22 +280,38 @@ func (s *AvatarService) ReadUserAvatar(ctx context.Context, userID string, size 
 			return data, meta, nil
 		}
 	}
+	recordSpanError(span, ErrNotFound)
 	return nil, AvatarDTO{}, ErrNotFound
 }
 
 // DeleteByID soft-deletes an avatar owned by owner and emits a delete event.
 func (s *AvatarService) DeleteByID(ctx context.Context, id, owner string) error {
+	ctx, span := otel.Tracer("avatar-service/service").Start(ctx, "AvatarService.DeleteByID")
+	defer span.End()
+	span.SetAttributes(attribute.String("avatar_id", id), attribute.String("user_id", owner))
+	status := "success"
+	defer func() {
+		s.metrics.IncAvatarDelete(status)
+	}()
 	if err := domain.ValidateUserID(owner); err != nil {
+		status = "error"
+		recordSpanError(span, err)
 		return err
 	}
 	a, err := s.repo.GetActiveByID(ctx, id)
 	if err != nil {
+		status = "error"
+		recordSpanError(span, err)
 		return err
 	}
 	if a.UserID != owner {
+		status = "forbidden"
+		recordSpanError(span, ErrForbidden)
 		return ErrForbidden
 	}
 	if err := s.repo.SoftDeleteByID(ctx, id, s.now().UTC()); err != nil {
+		status = "error"
+		recordSpanError(span, err)
 		return err
 	}
 	if s.broker != nil {
@@ -244,17 +322,24 @@ func (s *AvatarService) DeleteByID(ctx context.Context, id, owner string) error 
 
 // DeleteCurrentUserAvatar deletes the current user's latest available avatar.
 func (s *AvatarService) DeleteCurrentUserAvatar(ctx context.Context, pathUserID, owner string) error {
+	ctx, span := otel.Tracer("avatar-service/service").Start(ctx, "AvatarService.DeleteCurrentUserAvatar")
+	defer span.End()
+	span.SetAttributes(attribute.String("user_id", pathUserID))
 	if err := domain.ValidateUserID(pathUserID); err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	if err := domain.ValidateUserID(owner); err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	if pathUserID != owner {
+		recordSpanError(span, ErrForbidden)
 		return ErrForbidden
 	}
 	items, err := s.repo.ListActiveByUser(ctx, pathUserID)
 	if err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	for _, a := range items {
@@ -262,13 +347,18 @@ func (s *AvatarService) DeleteCurrentUserAvatar(ctx context.Context, pathUserID,
 			return s.DeleteByID(ctx, a.ID, owner)
 		}
 	}
+	recordSpanError(span, ErrNotFound)
 	return ErrNotFound
 }
 
 // GalleryByUser returns avatar cards for the web gallery and whether the user exists.
 func (s *AvatarService) GalleryByUser(ctx context.Context, userID string) ([]AvatarDTO, bool, error) {
+	ctx, span := otel.Tracer("avatar-service/service").Start(ctx, "AvatarService.GalleryByUser")
+	defer span.End()
+	span.SetAttributes(attribute.String("user_id", userID))
 	items, err := s.repo.ListActiveByUser(ctx, userID)
 	if err != nil {
+		recordSpanError(span, err)
 		return nil, false, err
 	}
 	out := make([]AvatarDTO, 0, len(items))
@@ -278,6 +368,14 @@ func (s *AvatarService) GalleryByUser(ctx context.Context, userID string) ([]Ava
 		}
 	}
 	return out, len(items) > 0, nil
+}
+
+func recordSpanError(span trace.Span, err error) {
+	if err == nil {
+		return
+	}
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
 }
 
 func dto(a domain.Avatar) AvatarDTO {

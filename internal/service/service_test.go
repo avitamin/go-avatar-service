@@ -4,9 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"go-avatar-service/internal/domain"
+	"go-avatar-service/internal/observability"
 )
 
 func TestUploadStoresOriginalAndPublishFailureMarksFailed(t *testing.T) {
@@ -34,6 +39,37 @@ func TestUploadStoresOriginalAndPublishFailureMarksFailed(t *testing.T) {
 	}
 	if !avatar.OriginalAvailable {
 		t.Fatal("original must remain available after publish failure")
+	}
+}
+
+func TestServiceObservabilityMetrics(t *testing.T) {
+	ctx := context.Background()
+	reg := prometheus.NewRegistry()
+	metrics := observability.NewMetrics(reg)
+	svc := NewAvatarService(NewMemoryRepository(), NewMemoryStorage(), &stubBroker{err: errors.New("down")}, WithObservability(metrics))
+
+	got, err := svc.Upload(ctx, UploadInput{
+		UserID:      "user-1",
+		FileName:    "avatar.jpg",
+		Content:     []byte{0xff, 0xd8, 0xff, 0xdb},
+		ContentType: "image/jpeg",
+	})
+	if err != nil {
+		t.Fatalf("Upload() error = %v", err)
+	}
+	if got.Status != domain.StatusFailed {
+		t.Fatalf("status = %q, want failed", got.Status)
+	}
+	if err := svc.DeleteByID(ctx, got.ID, "user-1"); err != nil {
+		t.Fatalf("DeleteByID() error = %v", err)
+	}
+
+	body := gatherMetrics(t, metrics)
+	if !bytes.Contains(body, []byte(`avatars_uploads_total{mime_type="image/jpeg",status="publish_failed"} 1`)) {
+		t.Fatalf("upload metric missing:\n%s", string(body))
+	}
+	if !bytes.Contains(body, []byte(`avatars_deletes_total{status="success"} 1`)) {
+		t.Fatalf("delete metric missing:\n%s", string(body))
 	}
 }
 
@@ -114,4 +150,16 @@ type stubBroker struct {
 
 func (b *stubBroker) Publish(context.Context, string, []byte, string) error {
 	return b.err
+}
+
+func gatherMetrics(t *testing.T, metrics *observability.Metrics) []byte {
+	t.Helper()
+	req := httptest.NewRequest("GET", "/metrics", nil)
+	rr := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(rr, req)
+	body, err := io.ReadAll(rr.Result().Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
 }
