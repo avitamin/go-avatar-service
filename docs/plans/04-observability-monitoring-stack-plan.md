@@ -16,6 +16,7 @@
 - OpenTelemetry Collector как единый OTLP endpoint для traces и logs;
 - Loki для хранения logs, полученных через native OTLP ingestion;
 - Grafana для dashboards и просмотра metrics/traces/logs;
+- `prom/node-exporter` для host-level infrastructure metrics в local/demo stack;
 - optional exporters для PostgreSQL и RabbitMQ infrastructure metrics.
 
 Целевая цепочка логов:
@@ -78,6 +79,7 @@ Prometheus:
 - scrape targets:
   - `server:8080/metrics`
   - `worker:<METRICS_ADDR>/metrics`, если worker metrics server включен
+  - `node-exporter:9100`
   - `rabbitmq:15692/metrics`, если включен RabbitMQ management metrics endpoint
   - postgres exporter, если добавлен
 
@@ -116,6 +118,22 @@ Loki:
 - хранение локальное docker volume;
 - включить OTLP ingestion и structured metadata, например `limits_config.allow_structured_metadata: true`;
 - labels из OTLP resource attributes учитывать в нормализованном виде, например `service.name` становится `service_name`.
+
+Node Exporter:
+
+- image `prom/node-exporter`;
+- local/demo-only service для host-level CPU, memory, filesystem, disk и network metrics;
+- scrape target в Prometheus: `node-exporter:9100`;
+- port `9100` не публиковать на host по умолчанию, потому что Prometheus scrapes внутри compose network;
+- readonly mounts:
+  - `/proc:/host/proc:ro`;
+  - `/sys:/host/sys:ro`;
+  - `/:/rootfs:ro`;
+- command flags:
+  - `--path.procfs=/host/proc`;
+  - `--path.sysfs=/host/sys`;
+  - `--path.rootfs=/rootfs`;
+- для Docker Desktop явно учитывать ограничение: metrics могут отражать Linux VM/container host, а не полную macOS/Windows host-систему.
 
 Postgres exporter:
 
@@ -192,12 +210,13 @@ Worker env:
 3. Добавить config tree под `configs/observability`.
 4. Настроить OpenTelemetry Collector OTLP receiver, traces pipeline в Jaeger и logs pipeline в Loki через `otlphttp/loki`.
 5. Настроить Loki OTLP ingestion и structured metadata.
-6. Настроить Prometheus scrape для application metrics и infrastructure metrics.
-7. Настроить Jaeger OTLP receiver и проброс UI port.
-8. Настроить Grafana provisioning datasources.
-9. Добавить Makefile targets для observability compose workflow.
-10. Обновить `.env.example` с новыми optional ports.
-11. Обновить `docs/development-workflow.md` или README только если stack должен быть виден обычным разработчикам; иначе достаточно ссылки из `docs/plans/README.md`.
+6. Добавить `node-exporter` service с readonly host mounts в observability compose override.
+7. Настроить Prometheus scrape для application metrics и infrastructure metrics, включая `node-exporter`.
+8. Настроить Jaeger OTLP receiver и проброс UI port.
+9. Настроить Grafana provisioning datasources.
+10. Добавить Makefile targets для observability compose workflow.
+11. Обновить `.env.example` с новыми optional ports для опубликованных UI/API endpoints; для Node Exporter port не добавлять, пока `9100` не публикуется на host.
+12. Обновить `docs/development-workflow.md` или README только если stack должен быть виден обычным разработчикам; иначе достаточно ссылки из `docs/plans/README.md`.
 
 ## Verification Plan
 
@@ -230,7 +249,9 @@ make docker-contract-tests
 
 - target `server` healthy;
 - target `worker` healthy, если `METRICS_ADDR` включен;
+- target `node-exporter` healthy;
 - HTTP и business metrics видны через Prometheus UI.
+- базовые host metrics присутствуют: `node_cpu_seconds_total`, `node_memory_MemAvailable_bytes`, `node_filesystem_size_bytes`, `node_network_receive_bytes_total`.
 
 6. Проверить Jaeger:
 
@@ -257,6 +278,7 @@ make docker-contract-tests
 - Server и worker экспортируют logs в Collector через `otlploggrpc`.
 - Collector отправляет logs в Loki через OTLP HTTP endpoint `/otlp`.
 - Prometheus scrapes server/worker metrics.
+- Prometheus scrapes `node-exporter` metrics without publishing Node Exporter on a host port.
 - Jaeger принимает traces от Collector.
 - Loki хранит OTLP logs и позволяет искать по service labels и `trace_id`.
 - Grafana имеет provisioned datasources Prometheus, Jaeger и Loki.

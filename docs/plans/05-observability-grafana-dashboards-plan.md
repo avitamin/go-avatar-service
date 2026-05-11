@@ -85,6 +85,18 @@ Panels:
   - use postgres exporter metric such as `pg_stat_activity_count` if exporter is enabled.
 - PostgreSQL up:
   - `up{job="postgres"}` or exporter-specific availability metric.
+- Node Exporter up:
+  - `up{job="node-exporter"}`.
+- Host CPU usage/load:
+  - use standard `node_cpu_seconds_total` and node load metrics from `prom/node-exporter`.
+- Host memory usage:
+  - use standard memory metrics such as `node_memory_MemAvailable_bytes` and total memory metrics.
+- Host filesystem usage:
+  - use `node_filesystem_size_bytes` and available/free filesystem metrics, excluding ephemeral mounts where needed.
+- Host disk IO:
+  - use standard disk read/write metrics from Node Exporter.
+- Host network traffic:
+  - use `node_network_receive_bytes_total` and `node_network_transmit_bytes_total`.
 - RabbitMQ queue depth:
   - use RabbitMQ Prometheus metric for `avatars.uploads` and `avatars.deletes`.
 - RabbitMQ consumers:
@@ -122,6 +134,7 @@ Panels:
 - Поднять observability compose stack.
 - Выполнить upload/list/read/delete сценарии через contract runner.
 - Проверить, что panels не показывают PromQL errors.
+- Проверить, что Node Exporter panels используют реальные `node_*` series из Prometheus target `node-exporter`.
 - Проверить, что empty panels объяснимы отсутствием traffic, а не неверными labels.
 - Проверить, что links открывают Jaeger/Loki с ожидаемыми фильтрами.
 
@@ -130,5 +143,5 @@ Panels:
 - Grafana стартует с тремя dashboard файлами без ручного импорта.
 - Service overview показывает RED metrics.
 - Business KPI dashboard показывает upload, delete, storage и worker metrics.
-- Infrastructure dashboard показывает PostgreSQL/RabbitMQ/dependency health signals.
+- Infrastructure dashboard показывает PostgreSQL/RabbitMQ/Node Exporter/dependency health signals.
 - Datasource links работают для traces и logs.
