@@ -1,0 +1,183 @@
+{
+  "uid": "avatar-infrastructure",
+  "title": "Avatar Infrastructure",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["avatar-service", "infrastructure"],
+  "timezone": "browser",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "query": "label_values(up, job)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {"selected": true, "text": "All", "value": "$__all"}
+      },
+      {
+        "name": "interval",
+        "type": "interval",
+        "query": "1m,5m,15m,30m,1h",
+        "current": {"text": "$__rate_interval", "value": "$__rate_interval"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "PostgreSQL up",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
+      "targets": [
+        {"expr": "up{job=\"postgres\"}", "legendFormat": "postgres"}
+      ]
+    },
+    {
+      "id": 2,
+      "title": "PostgreSQL connections",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0},
+      "targets": [
+        {"expr": "sum(pg_stat_activity_count)", "legendFormat": "connections"}
+      ]
+    },
+    {
+      "id": 3,
+      "title": "RabbitMQ queue depth",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0},
+      "targets": [
+        {"expr": "sum by (queue) (rabbitmq_queue_messages{queue=~\"avatars\\\\..*\"})", "legendFormat": "{{queue}}"}
+      ]
+    },
+    {
+      "id": 4,
+      "title": "RabbitMQ consumers",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0},
+      "targets": [
+        {"expr": "sum by (queue) (rabbitmq_queue_consumers{queue=~\"avatars\\\\..*\"})", "legendFormat": "{{queue}}"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Node Exporter up",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 6},
+      "targets": [
+        {"expr": "up{job=\"node-exporter\"}", "legendFormat": "node-exporter"}
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Host CPU usage",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 6},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "targets": [
+        {"expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[$interval]))", "legendFormat": "{{instance}}"}
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Host memory usage",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 6},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "targets": [
+        {"expr": "1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)", "legendFormat": "memory"}
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Filesystem usage",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 6},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "targets": [
+        {"expr": "1 - (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\"})", "legendFormat": "{{mountpoint}}"}
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Host disk IO",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 12},
+      "fieldConfig": {"defaults": {"unit": "Bps"}, "overrides": []},
+      "targets": [
+        {"expr": "sum by (device) (rate(node_disk_read_bytes_total[$interval]))", "legendFormat": "read {{device}}"},
+        {"expr": "sum by (device) (rate(node_disk_written_bytes_total[$interval]))", "legendFormat": "write {{device}}"}
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Host network traffic",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 12},
+      "fieldConfig": {"defaults": {"unit": "Bps"}, "overrides": []},
+      "targets": [
+        {"expr": "sum by (device) (rate(node_network_receive_bytes_total{device!=\"lo\"}[$interval]))", "legendFormat": "rx {{device}}"},
+        {"expr": "sum by (device) (rate(node_network_transmit_bytes_total{device!=\"lo\"}[$interval]))", "legendFormat": "tx {{device}}"}
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Dependency operation errors",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 12},
+      "targets": [
+        {"expr": "sum by (component, operation) (rate(avatar_dependency_operations_total{status=\"error\"}[$interval]))", "legendFormat": "{{component}} {{operation}}"}
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Dependency latency p95",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, component, operation) (rate(avatar_dependency_operation_duration_seconds_bucket[$interval])))", "legendFormat": "{{component}} {{operation}}"}
+      ]
+    },
+    {
+      "id": 13,
+      "title": "RabbitMQ up",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 20},
+      "targets": [
+        {"expr": "up{job=\"rabbitmq\"}", "legendFormat": "rabbitmq"}
+      ]
+    },
+    {
+      "id": 14,
+      "title": "MinIO health via application checks",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 20},
+      "targets": [
+        {"expr": "sum by (operation, status) (rate(avatar_dependency_operations_total{component=\"minio\"}[$interval]))", "legendFormat": "{{operation}} {{status}}"}
+      ]
+    }
+  ]
+}

@@ -168,6 +168,8 @@ curl -fsS http://localhost:18080/metrics
 curl -fsS -H 'X-Request-ID: manual-check' http://localhost:18080/health
 ```
 
+Observability Compose stack провиженит Grafana datasources `Prometheus`, `Jaeger`, `Loki` и dashboards `Avatar Service Overview`, `Avatar Business KPIs`, `Avatar Infrastructure`.
+
 Полный developer workflow, `.env` overrides, shared JetBrains run configurations и скрипт подбора свободных портов вынесены в [docs/development-workflow.md](docs/development-workflow.md).
 
 ## Проектная структура

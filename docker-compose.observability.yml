@@ -22,6 +22,14 @@ services:
     depends_on:
       - otel-collector
 
+  rabbitmq:
+    command:
+      - sh
+      - -c
+      - rabbitmq-plugins enable --offline rabbitmq_prometheus && rabbitmq-server
+    ports:
+      - "${COMPOSE_RABBITMQ_METRICS_PORT:-15692}:15692"
+
   prometheus:
     image: prom/prometheus
     command:
@@ -34,6 +42,15 @@ services:
       - server
       - worker
       - node-exporter
+      - postgres-exporter
+      - rabbitmq
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://avatars:avatars@postgres:5432/avatars?sslmode=disable"
+    depends_on:
+      - postgres
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib

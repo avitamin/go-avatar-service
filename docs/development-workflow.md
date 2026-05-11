@@ -257,7 +257,7 @@ make docker-contract-tests
 
 `scripts/find-free-ports.sh` выводит и базовые compose-порты, и порты observability stack. `set -a` нужен, чтобы `docker compose` получил эти значения как environment overrides поверх `.env`.
 
-Этот stack добавляет Prometheus, OpenTelemetry Collector, Jaeger, Loki, Grafana и `node-exporter`. Базовые UI/API endpoints при значениях из `.env.example`:
+Этот stack добавляет Prometheus, OpenTelemetry Collector, Jaeger, Loki, Grafana, `node-exporter`, `postgres-exporter` и RabbitMQ Prometheus metrics endpoint. Базовые UI/API endpoints при значениях из `.env.example`:
 
 | Endpoint | URL |
 | --- | --- |
@@ -267,8 +267,11 @@ make docker-contract-tests
 | Loki API | `http://localhost:3100` |
 | OpenTelemetry Collector gRPC | `localhost:4317` |
 | OpenTelemetry Collector HTTP | `localhost:4318` |
+| RabbitMQ metrics | `http://localhost:15692/metrics` |
 
-Server и worker отправляют traces и logs в Collector через OTLP/gRPC. Collector экспортирует traces в Jaeger, logs в Loki через native OTLP endpoint, а Prometheus scrapes `server:8080/metrics`, `worker:9091/metrics` и `node-exporter:9100`.
+Server и worker отправляют traces и logs в Collector через OTLP/gRPC. Collector экспортирует traces в Jaeger, logs в Loki через native OTLP endpoint, а Prometheus scrapes `server:8080/metrics`, `worker:9091/metrics`, `node-exporter:9100`, `postgres-exporter:9187` и `rabbitmq:15692`.
+
+Grafana автоматически подхватывает provisioned datasources `Prometheus`, `Jaeger`, `Loki` и dashboards из folder `Avatar Service`: `Avatar Service Overview`, `Avatar Business KPIs`, `Avatar Infrastructure`.
 
 Для проверки после contract tests:
 
@@ -277,7 +280,7 @@ curl -fsS http://localhost:9090/api/v1/targets
 curl -fsS "http://localhost:3100/loki/api/v1/labels"
 ```
 
-В Prometheus targets должны быть healthy `avatar-service-server`, `avatar-service-worker` и `node-exporter`. В Jaeger ищите service `avatar-service-server`; в Grafana доступны datasources `Prometheus`, `Jaeger`, `Loki`. На Docker Desktop host-level metrics от `node-exporter` могут отражать Linux VM/container host, а не полную macOS/Windows host-систему.
+В Prometheus targets должны быть healthy `avatar-service-server`, `avatar-service-worker`, `node-exporter`, `postgres` и `rabbitmq`. В Jaeger ищите service `avatar-service-server`; в Grafana доступны datasources `Prometheus`, `Jaeger`, `Loki`. На Docker Desktop host-level metrics от `node-exporter` могут отражать Linux VM/container host, а не полную macOS/Windows host-систему.
 
 Prometheus metric groups:
 
