@@ -1,5 +1,17 @@
 # Alerting для avatar-service
 
+## Статус реализации
+
+Статус: реализовано в observability-конфигах.
+
+Подтверждено:
+
+- `configs/observability/prometheus/alerts.yml` содержит 7 alert rules для HTTP errors, upload errors, latency, dependency errors, RabbitMQ backlog и worker failures.
+- `configs/observability/prometheus/prometheus.yml` подключает `rule_files` и `alerting.alertmanagers`.
+- `configs/observability/alertmanager/alertmanager.yml` содержит local null receiver без внешних секретов.
+- `docker-compose.observability.yml` поднимает Alertmanager и публикует `${COMPOSE_ALERTMANAGER_PORT:-9093}:9093`.
+- Наличие rules, labels и Alertmanager wiring покрыто тестами в `internal/observability/grafana_dashboards_test.go`.
+
 ## Источники и зависимости
 
 - Metrics names и labels должны соответствовать `docs/plans/03-observability-application-instrumentation-plan.md`.

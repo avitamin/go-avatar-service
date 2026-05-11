@@ -1,5 +1,16 @@
 # Детальный план исправления `/health`
 
+## Статус реализации
+
+Статус: реализовано в коде приложения.
+
+Подтверждено:
+
+- `internal/service/health_service.go` содержит runtime health service со статусами `ok` и `degraded`.
+- `internal/app/app.go` собирает health probes для `postgres`, `minio`, `rabbitmq` из фактически выбранных adapters.
+- `internal/http/router.go` отдает `/health` через runtime health checker.
+- Тесты покрывают degraded fallback и component statuses в `internal/service/health_service_test.go`, `internal/app/app_health_test.go`, `internal/http/router_test.go` и `tests/contract/scenarios.go`.
+
 ## Что использовать как source of truth
 
 - Поведение `/health`: [docs/requirements/confirmed-requirements.md](../requirements/confirmed-requirements.md)

@@ -1,5 +1,19 @@
 # Grafana dashboards для avatar-service
 
+## Статус реализации
+
+Статус: реализовано в provisioning-конфигах Grafana.
+
+Подтверждено:
+
+- Dashboards лежат в `configs/observability/grafana/dashboards/`:
+  - `avatar-service-overview.json`
+  - `avatar-business-kpis.json`
+  - `avatar-infrastructure.json`
+- Datasources и dashboard provider лежат в `configs/observability/grafana/provisioning/`.
+- Infrastructure dashboard содержит panel для active alerts по `ALERTS{service="avatar-service"}`.
+- JSON/YAML provisioning покрыт тестами в `internal/observability/grafana_dashboards_test.go`.
+
 ## Источники и зависимости
 
 - Application metrics и trace/log correlation: `docs/plans/03-observability-application-instrumentation-plan.md`.

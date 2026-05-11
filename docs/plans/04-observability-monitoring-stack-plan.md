@@ -1,5 +1,17 @@
 # Инфраструктура мониторинга и логирования
 
+## Статус реализации
+
+Статус: реализовано в локальном Compose stack.
+
+Подтверждено:
+
+- `docker-compose.observability.yml` добавляет Prometheus, Alertmanager, Grafana, Jaeger, Loki, OpenTelemetry Collector, node-exporter, postgres-exporter и RabbitMQ Prometheus metrics.
+- `Makefile` содержит `docker-observability-up`, `docker-observability-down`, `docker-observability-logs`, `docker-observability-ps`.
+- `configs/observability/prometheus/prometheus.yml` scrape-ит server, worker, postgres-exporter, RabbitMQ и node-exporter.
+- `configs/observability/otel-collector/config.yml`, `configs/observability/loki/loki.yml` и Grafana provisioning находятся в `configs/observability/`.
+- Конфигурационные ожидания покрыты тестами в `internal/observability/grafana_dashboards_test.go`.
+
 ## Источники и контекст
 
 - Базовая инфраструктура сейчас описана в `docker-compose.yml`: server, worker, PostgreSQL, MinIO, RabbitMQ.
