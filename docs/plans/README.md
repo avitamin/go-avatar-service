@@ -25,7 +25,7 @@
 - [01-health-runtime-checks-plan.md](./01-health-runtime-checks-plan.md) - детальный план реализации runtime checks для `/health`.
 - [02-migrations-golang-migrate-plan.md](./02-migrations-golang-migrate-plan.md) - план перехода migration workflow на `golang-migrate`.
 - [03-observability-application-instrumentation-plan.md](./03-observability-application-instrumentation-plan.md) - реализованный план внедрения OpenTelemetry tracing, Prometheus metrics и `slog` correlation в коде server/worker.
-- [04-observability-monitoring-stack-plan.md](./04-observability-monitoring-stack-plan.md) - план локального Prometheus, Jaeger, Grafana, Loki/Alloy stack через compose override.
+- [04-observability-monitoring-stack-plan.md](./04-observability-monitoring-stack-plan.md) - план локального Prometheus, Jaeger, Grafana, Loki и OpenTelemetry Collector stack через compose override.
 - [05-observability-grafana-dashboards-plan.md](./05-observability-grafana-dashboards-plan.md) - план provisioned Grafana dashboards для RED metrics, infrastructure и business KPIs.
 - [06-observability-alerting-plan.md](./06-observability-alerting-plan.md) - бонусный план Prometheus Alertmanager rules для error rate, latency, dependency и queue alerts.
 
