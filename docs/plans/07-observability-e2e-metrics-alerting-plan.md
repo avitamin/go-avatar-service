@@ -1,10 +1,10 @@
-# E2E-проверки метрик и алертинга
+# E2E-автотесты метрик и алертинга
 
-## Статус
+## Статус e2e-автотестов
 
-Статус: план к реализации через TDD.
+Статус: e2e-автотесты еще не реализованы; этот документ описывает план их реализации через TDD.
 
-Этот документ описывает отдельный e2e test harness для проверки observability stack. Он не меняет текущие alert rules и не заменяет existing unit/config tests. Цель - добавить проверяемый путь от пользовательского или test-only события до Prometheus metrics, Prometheus alert state и Alertmanager wiring.
+Этот документ описывает отдельный e2e test harness для автопроверки observability stack. Он не меняет текущие alert rules и не заменяет existing unit/config tests. Основная цель - добавить e2e-автотесты, которые проверяют путь от пользовательского или test-only события до Prometheus metrics, Prometheus alert state и Alertmanager wiring.
 
 ## Источники и текущий baseline
 
@@ -24,7 +24,7 @@
   - `WorkerProcessingFailures`
 - `internal/observability/grafana_dashboards_test.go` уже проверяет YAML/JSON конфиги, наличие alert rules и базовый wiring Alertmanager.
 
-## Цель
+## Цель e2e-автотестов
 
 Добавить opt-in e2e-проверки, которые:
 

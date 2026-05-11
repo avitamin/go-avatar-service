@@ -28,7 +28,8 @@
 - [04-observability-monitoring-stack-plan.md](./04-observability-monitoring-stack-plan.md) - **реализовано**: локальный Prometheus, `prom/node-exporter`, Jaeger, Grafana, Loki и OpenTelemetry Collector stack через compose override.
 - [05-observability-grafana-dashboards-plan.md](./05-observability-grafana-dashboards-plan.md) - **реализовано**: provisioned Grafana dashboards для RED metrics, infrastructure и business KPIs.
 - [06-observability-alerting-plan.md](./06-observability-alerting-plan.md) - **реализовано**: Prometheus Alertmanager rules для error rate, latency, dependency и queue alerts.
-- [07-observability-e2e-metrics-alerting-plan.md](./07-observability-e2e-metrics-alerting-plan.md) - **план к реализации**: TDD e2e-проверок application metrics, Prometheus alert rules и Alertmanager wiring.
+- [07-observability-e2e-metrics-alerting-plan.md](./07-observability-e2e-metrics-alerting-plan.md) - **план к реализации**: TDD e2e-автотестов для application metrics, Prometheus alert rules и Alertmanager wiring.
+- [07-observability-e2e-metrics-alerting-decomposition/](./07-observability-e2e-metrics-alerting-decomposition/) - **декомпозиция**: parallel work items и worker prompts для реализации e2e-автотестов observability.
 
 ## Рекомендуемый порядок observability-этапов
 
