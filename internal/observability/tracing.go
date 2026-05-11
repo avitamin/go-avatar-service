@@ -6,9 +6,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 )
 
 // InitTracing configures global OpenTelemetry tracing and propagation.
@@ -19,13 +17,7 @@ func InitTracing(ctx context.Context, cfg Config) (func(context.Context) error, 
 		otel.SetTracerProvider(provider)
 		return provider.Shutdown, nil
 	}
-	resAttrs := []attributeOption{
-		{key: string(semconv.ServiceNameKey), value: cfg.ServiceName},
-	}
-	if cfg.ServiceVersion != "" {
-		resAttrs = append(resAttrs, attributeOption{key: string(semconv.ServiceVersionKey), value: cfg.ServiceVersion})
-	}
-	res, err := resource.Merge(resource.Default(), resource.NewWithAttributes(semconv.SchemaURL, toAttributes(resAttrs)...))
+	res, err := newResource(cfg)
 	if err != nil {
 		return nil, err
 	}

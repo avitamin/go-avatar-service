@@ -94,6 +94,11 @@ func RunServer(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = shutdownTracing(context.Background()) }()
+	shutdownLogging, err := observability.InitLogging(ctx, obsCfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = shutdownLogging(context.Background()) }()
 	metrics := observability.NewMetrics(nil)
 	logger := observability.NewLogger(obsCfg.ServiceName, "server", os.Stdout)
 	storeRuntime, err := newStoreFromEnv(ctx, metrics)
@@ -139,6 +144,11 @@ func RunWorker(ctx context.Context, out io.Writer) error {
 		return err
 	}
 	defer func() { _ = shutdownTracing(context.Background()) }()
+	shutdownLogging, err := observability.InitLogging(ctx, obsCfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = shutdownLogging(context.Background()) }()
 	metrics := observability.NewMetrics(nil)
 	logger := observability.NewLogger(obsCfg.ServiceName, "worker", os.Stdout)
 	rabbitURL := os.Getenv("RABBITMQ_URL")

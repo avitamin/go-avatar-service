@@ -244,6 +244,41 @@ Server metrics всегда доступны на основном HTTP server e
 
 Worker metrics поднимаются только если задан `METRICS_ADDR`. Текущий `docker-compose.yml` не публикует worker metrics port по умолчанию; для проверки worker metrics добавьте `METRICS_ADDR` и port mapping в локальный compose override или временно запустите worker вне Compose с нужным env.
 
+Для локального observability stack используйте отдельный Compose override:
+
+```bash
+set -a
+eval "$(scripts/find-free-ports.sh)"
+set +a
+make docker-observability-up
+docker compose run --rm server migrate up
+make docker-contract-tests
+```
+
+`scripts/find-free-ports.sh` выводит и базовые compose-порты, и порты observability stack. `set -a` нужен, чтобы `docker compose` получил эти значения как environment overrides поверх `.env`.
+
+Этот stack добавляет Prometheus, OpenTelemetry Collector, Jaeger, Loki, Grafana и `node-exporter`. Базовые UI/API endpoints при значениях из `.env.example`:
+
+| Endpoint | URL |
+| --- | --- |
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3000` |
+| Jaeger | `http://localhost:16686` |
+| Loki API | `http://localhost:3100` |
+| OpenTelemetry Collector gRPC | `localhost:4317` |
+| OpenTelemetry Collector HTTP | `localhost:4318` |
+
+Server и worker отправляют traces и logs в Collector через OTLP/gRPC. Collector экспортирует traces в Jaeger, logs в Loki через native OTLP endpoint, а Prometheus scrapes `server:8080/metrics`, `worker:9091/metrics` и `node-exporter:9100`.
+
+Для проверки после contract tests:
+
+```bash
+curl -fsS http://localhost:9090/api/v1/targets
+curl -fsS "http://localhost:3100/loki/api/v1/labels"
+```
+
+В Prometheus targets должны быть healthy `avatar-service-server`, `avatar-service-worker` и `node-exporter`. В Jaeger ищите service `avatar-service-server`; в Grafana доступны datasources `Prometheus`, `Jaeger`, `Loki`. На Docker Desktop host-level metrics от `node-exporter` могут отражать Linux VM/container host, а не полную macOS/Windows host-систему.
+
 Prometheus metric groups:
 
 - HTTP: `http_requests_total`, `http_request_duration_seconds`, `http_inflight_requests`.

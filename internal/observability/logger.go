@@ -39,7 +39,12 @@ func NewLogger(serviceName, component string, out io.Writer) *slog.Logger {
 	if component != "" {
 		attrs = append(attrs, slog.String("component", component))
 	}
-	return slog.New(slog.NewJSONHandler(out, nil).WithAttrs(attrs))
+	jsonHandler := slog.NewJSONHandler(out, nil).WithAttrs(attrs)
+	otelHandler := currentOTELLogHandler()
+	if otelHandler != nil {
+		otelHandler = otelHandler.WithAttrs(attrs)
+	}
+	return slog.New(newFanoutHandler(jsonHandler, otelHandler))
 }
 
 // Attrs returns correlation attrs followed by caller-provided key/value pairs.
