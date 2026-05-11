@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -41,7 +42,7 @@ func NewRouter(svc *service.AvatarService, health service.RuntimeHealthChecker, 
 	}
 	r := chi.NewRouter()
 	r.Use(observability.HTTPMiddleware(cfg.observability))
-	h := &handler{svc: svc, healthSvc: health}
+	h := &handler{svc: svc, healthSvc: health, metrics: cfg.observability.Metrics}
 	r.Get("/health", h.health)
 	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		cfg.observability.Metrics.Handler().ServeHTTP(w, r)
@@ -61,6 +62,7 @@ func NewRouter(svc *service.AvatarService, health service.RuntimeHealthChecker, 
 type handler struct {
 	svc       *service.AvatarService
 	healthSvc service.RuntimeHealthChecker
+	metrics   *observability.Metrics
 }
 
 func (h *handler) health(w http.ResponseWriter, r *http.Request) {
@@ -69,38 +71,51 @@ func (h *handler) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) upload(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	mime := "unknown"
+	recordRejectedUpload := func() {
+		h.metrics.ObserveAvatarUpload("error", mime, time.Since(start))
+	}
 	userID := r.Header.Get("X-User-ID")
 	if err := domain.ValidateUserID(userID); err != nil {
+		recordRejectedUpload()
 		writeError(w, http.StatusBadRequest, "invalid_user_id", "Invalid X-User-ID", nil)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadBytes+1024*1024)
 	if err := r.ParseMultipartForm(MaxUploadBytes + 1); err != nil {
+		recordRejectedUpload()
 		writeError(w, http.StatusBadRequest, "invalid_multipart", "Invalid multipart form", nil)
 		return
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
+		recordRejectedUpload()
 		writeError(w, http.StatusBadRequest, "file_required", "Multipart field file is required", nil)
 		return
 	}
 	defer func() { _ = file.Close() }()
 	data, err := io.ReadAll(io.LimitReader(file, MaxUploadBytes+1))
 	if err != nil {
+		recordRejectedUpload()
 		writeError(w, http.StatusBadRequest, "read_file_failed", "Could not read uploaded file", nil)
 		return
 	}
 	if len(data) > MaxUploadBytes {
+		recordRejectedUpload()
 		writeError(w, http.StatusRequestEntityTooLarge, "file_too_large", "File is larger than 10 MB", nil)
 		return
 	}
-	mime, err := imageproc.Sniff(data)
+	sniffedMime, err := imageproc.Sniff(data)
 	if err != nil {
+		recordRejectedUpload()
 		writeError(w, http.StatusBadRequest, "unsupported_image", "Unsupported image bytes", nil)
 		return
 	}
+	mime = sniffedMime
 	if mime != "image/webp" {
 		if _, err := imageproc.Decode(data, mime); err != nil {
+			recordRejectedUpload()
 			writeError(w, http.StatusBadRequest, "invalid_image", "Image cannot be decoded", nil)
 			return
 		}

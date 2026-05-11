@@ -45,6 +45,7 @@ pick_port compose_rabbitmq_management_port 15672
 pick_port compose_minio_api_port 9000
 pick_port compose_minio_console_port 9001
 pick_port compose_prometheus_port 9090
+pick_port compose_alertmanager_port 9093
 pick_port compose_grafana_port 3000
 pick_port compose_jaeger_ui_port 16686
 pick_port compose_otel_collector_grpc_port 4317
@@ -63,6 +64,7 @@ COMPOSE_RABBITMQ_MANAGEMENT_PORT=$compose_rabbitmq_management_port
 COMPOSE_MINIO_API_PORT=$compose_minio_api_port
 COMPOSE_MINIO_CONSOLE_PORT=$compose_minio_console_port
 COMPOSE_PROMETHEUS_PORT=$compose_prometheus_port
+COMPOSE_ALERTMANAGER_PORT=$compose_alertmanager_port
 COMPOSE_GRAFANA_PORT=$compose_grafana_port
 COMPOSE_JAEGER_UI_PORT=$compose_jaeger_ui_port
 COMPOSE_OTEL_COLLECTOR_GRPC_PORT=$compose_otel_collector_grpc_port

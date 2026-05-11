@@ -85,6 +85,85 @@ func TestObservabilityStackScrapesInfrastructureMetrics(t *testing.T) {
 	}
 }
 
+func TestObservabilityStackConfiguresAlerting(t *testing.T) {
+	root := repoRoot(t)
+
+	alertsBody := readFile(t, filepath.Join(root, "configs/observability/prometheus/alerts.yml"))
+	var alertsConfig map[string]any
+	if err := yaml.Unmarshal(alertsBody, &alertsConfig); err != nil {
+		t.Fatalf("alerts config must be valid YAML without duplicate mapping keys: %v", err)
+	}
+	alerts := string(alertsBody)
+	for _, want := range []string{
+		"HighHTTPErrorRate",
+		"HighUploadErrorRate",
+		"HighResponseTimeP95",
+		"UploadLatencyCritical",
+		"DependencyOperationErrors",
+		"RabbitMQQueueBacklog",
+		"WorkerProcessingFailures",
+		"severity:",
+		"service: avatar-service",
+		"component: api",
+		"component: rabbitmq",
+		"component: worker",
+	} {
+		if !strings.Contains(alerts, want) {
+			t.Fatalf("alerts config missing %q", want)
+		}
+	}
+
+	prometheus := string(readFile(t, filepath.Join(root, "configs/observability/prometheus/prometheus.yml")))
+	for _, want := range []string{"alerting:", "alertmanagers:", "alertmanager:9093"} {
+		if !strings.Contains(prometheus, want) {
+			t.Fatalf("prometheus config missing alertmanager wiring %q", want)
+		}
+	}
+
+	alertmanager := string(readFile(t, filepath.Join(root, "configs/observability/alertmanager/alertmanager.yml")))
+	for _, want := range []string{"receiver: \"null\"", "name: \"null\""} {
+		if !strings.Contains(alertmanager, want) {
+			t.Fatalf("alertmanager config missing null receiver %q", want)
+		}
+	}
+}
+
+func TestObservabilityStackRunsAlertmanager(t *testing.T) {
+	root := repoRoot(t)
+
+	composeText := string(readFile(t, filepath.Join(root, "docker-compose.observability.yml")))
+	for _, want := range []string{
+		"alertmanager:",
+		"prom/alertmanager",
+		"./configs/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro",
+		"${COMPOSE_ALERTMANAGER_PORT:-9093}:9093",
+	} {
+		if !strings.Contains(composeText, want) {
+			t.Fatalf("observability compose missing alertmanager setting %q", want)
+		}
+	}
+
+	envExample := string(readFile(t, filepath.Join(root, ".env.example")))
+	if !strings.Contains(envExample, "COMPOSE_ALERTMANAGER_PORT=9093") {
+		t.Fatalf(".env.example missing COMPOSE_ALERTMANAGER_PORT")
+	}
+
+	portsScript := string(readFile(t, filepath.Join(root, "scripts/find-free-ports.sh")))
+	if !strings.Contains(portsScript, "COMPOSE_ALERTMANAGER_PORT=$compose_alertmanager_port") {
+		t.Fatalf("find-free-ports script missing COMPOSE_ALERTMANAGER_PORT output")
+	}
+}
+
+func TestGrafanaInfrastructureDashboardShowsActiveAlerts(t *testing.T) {
+	root := repoRoot(t)
+	body := string(readFile(t, filepath.Join(root, "configs/observability/grafana/dashboards/avatar-infrastructure.json")))
+	for _, want := range []string{"Active alerts", `ALERTS{service=\"avatar-service\"`, `alertstate=~\"pending|firing\"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("infrastructure dashboard missing active alerts panel content %q", want)
+		}
+	}
+}
+
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()

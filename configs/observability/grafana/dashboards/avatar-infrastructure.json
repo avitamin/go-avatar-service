@@ -178,6 +178,16 @@
       "targets": [
         {"expr": "sum by (operation, status) (rate(avatar_dependency_operations_total{component=\"minio\"}[$interval]))", "legendFormat": "{{operation}} {{status}}"}
       ]
+    },
+    {
+      "id": 15,
+      "title": "Active alerts",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 28},
+      "targets": [
+        {"expr": "ALERTS{service=\"avatar-service\", alertstate=~\"pending|firing\"}", "legendFormat": "{{alertname}} {{severity}} {{alertstate}}"}
+      ]
     }
   ]
 }
