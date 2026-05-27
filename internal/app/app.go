@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,6 +16,7 @@ import (
 
 	"go-avatar-service/internal/broker/rabbitmq"
 	httpapi "go-avatar-service/internal/http"
+	"go-avatar-service/internal/observability"
 	pgrepo "go-avatar-service/internal/repository/postgres"
 	"go-avatar-service/internal/service"
 	miniostore "go-avatar-service/internal/storage/minio"
@@ -88,19 +88,31 @@ func RunServer(ctx context.Context) error {
 	if addr == "" {
 		addr = ":8080"
 	}
-	storeRuntime, err := newStoreFromEnv(ctx)
+	obsCfg := observability.ConfigFromEnv()
+	shutdownTracing, err := observability.InitTracing(ctx, obsCfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = shutdownTracing(context.Background()) }()
+	shutdownLogging, err := observability.InitLogging(ctx, obsCfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = shutdownLogging(context.Background()) }()
+	metrics := observability.NewMetrics(nil)
+	logger := observability.NewLogger(obsCfg.ServiceName, "server", os.Stdout)
+	storeRuntime, err := newStoreFromEnv(ctx, metrics)
 	if err != nil {
 		return err
 	}
 	defer storeRuntime.close()
-	brokerRuntime, err := newBrokerFromEnv()
+	brokerRuntime, err := newBrokerFromEnv(metrics)
 	if err != nil {
 		return err
 	}
 	defer brokerRuntime.close()
-	svc := service.NewAvatarService(storeRuntime.repo, storeRuntime.storage, brokerRuntime.broker)
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	server := newHTTPServer(addr, httpapi.NewRouter(svc, newServerHealthService(logger, storeRuntime, brokerRuntime)))
+	svc := service.NewAvatarService(storeRuntime.repo, storeRuntime.storage, brokerRuntime.broker, service.WithObservability(metrics))
+	server := newHTTPServer(addr, httpapi.NewRouter(svc, newServerHealthService(logger, storeRuntime, brokerRuntime), httpapi.WithObservability(observability.RouterOptions{Logger: logger, Metrics: metrics})))
 	shutdownErrCh := make(chan error, 1)
 	go func() {
 		<-ctx.Done()
@@ -108,7 +120,7 @@ func RunServer(ctx context.Context) error {
 		defer cancel()
 		shutdownErrCh <- server.Shutdown(shutdownCtx)
 	}()
-	log.Printf("starting avatars-service server on %s", addr)
+	logger.Info("starting avatars-service server", "addr", addr)
 	err = server.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {
 		select {
@@ -126,29 +138,52 @@ func RunWorker(ctx context.Context, out io.Writer) error {
 	if out == nil {
 		out = io.Discard
 	}
+	obsCfg := observability.ConfigFromEnv()
+	shutdownTracing, err := observability.InitTracing(ctx, obsCfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = shutdownTracing(context.Background()) }()
+	shutdownLogging, err := observability.InitLogging(ctx, obsCfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = shutdownLogging(context.Background()) }()
+	metrics := observability.NewMetrics(nil)
+	logger := observability.NewLogger(obsCfg.ServiceName, "worker", os.Stdout)
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
 		rabbitURL = "amqp://guest:guest@localhost:5672/"
 	}
-	client, err := rabbitmq.Dial(rabbitURL)
+	client, err := rabbitmq.Dial(rabbitURL, rabbitmq.WithObservability(metrics))
 	if err != nil {
 		return err
 	}
 	defer func() { _ = client.Close() }()
-	storeRuntime, err := newStoreFromEnv(ctx)
+	storeRuntime, err := newStoreFromEnv(ctx, metrics)
 	if err != nil {
 		return err
 	}
 	defer storeRuntime.close()
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	metricsServer, stopMetrics := maybeStartMetricsServer(ctx, obsCfg.MetricsAddr, metrics)
+	defer stopMetrics()
 	runner := worker.NewRunner(
 		client,
-		worker.NewUploadHandler(storeRuntime.repo, storeRuntime.storage, logger),
-		worker.NewDeleteHandler(storeRuntime.repo, storeRuntime.storage, logger),
+		worker.NewUploadHandler(storeRuntime.repo, storeRuntime.storage, logger, worker.WithHandlerObservability(metrics)),
+		worker.NewDeleteHandler(storeRuntime.repo, storeRuntime.storage, logger, worker.WithHandlerObservability(metrics)),
 		logger,
+		worker.WithObservability(metrics),
 	)
 	_, _ = fmt.Fprintln(out, "worker started")
-	return runner.Run(ctx)
+	err = runner.Run(ctx)
+	if metricsServer != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
+		defer cancel()
+		if shutdownErr := metricsServer.Shutdown(shutdownCtx); err == nil {
+			err = shutdownErr
+		}
+	}
+	return err
 }
 
 func usage(out io.Writer) error {
@@ -191,7 +226,11 @@ func newServerHealthService(logger *slog.Logger, store storeRuntime, broker brok
 	})
 }
 
-func newBrokerFromEnv() (brokerRuntime, error) {
+func newBrokerFromEnv(metricsOpt ...*observability.Metrics) (brokerRuntime, error) {
+	var metrics *observability.Metrics
+	if len(metricsOpt) > 0 {
+		metrics = metricsOpt[0]
+	}
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
 		return brokerRuntime{
@@ -200,7 +239,7 @@ func newBrokerFromEnv() (brokerRuntime, error) {
 			rabbitmq: service.DegradedComponent("rabbitmq broker is running in noop mode"),
 		}, nil
 	}
-	client, err := rabbitmq.Dial(rabbitURL)
+	client, err := rabbitmq.Dial(rabbitURL, rabbitmq.WithObservability(metrics))
 	if err != nil {
 		return brokerRuntime{}, err
 	}
@@ -211,7 +250,11 @@ func newBrokerFromEnv() (brokerRuntime, error) {
 	}, nil
 }
 
-func newStoreFromEnv(ctx context.Context) (storeRuntime, error) {
+func newStoreFromEnv(ctx context.Context, metricsOpt ...*observability.Metrics) (storeRuntime, error) {
+	var metrics *observability.Metrics
+	if len(metricsOpt) > 0 {
+		metrics = metricsOpt[0]
+	}
 	dsn := os.Getenv("POSTGRES_DSN")
 	minioCfg, hasMinio, err := minioConfigFromEnv()
 	if err != nil {
@@ -229,11 +272,11 @@ func newStoreFromEnv(ctx context.Context) (storeRuntime, error) {
 	if dsn == "" || !hasMinio {
 		return storeRuntime{}, errors.New("POSTGRES_DSN and MINIO_ENDPOINT/MINIO_ACCESS_KEY/MINIO_SECRET_KEY/MINIO_BUCKET must be configured together")
 	}
-	repo, err := pgrepo.Open(ctx, dsn)
+	repo, err := pgrepo.Open(ctx, dsn, pgrepo.WithObservability(metrics))
 	if err != nil {
 		return storeRuntime{}, err
 	}
-	storage, err := miniostore.Open(ctx, minioCfg)
+	storage, err := miniostore.Open(ctx, minioCfg, miniostore.WithObservability(metrics))
 	if err != nil {
 		_ = repo.Close()
 		return storeRuntime{}, err
@@ -289,4 +332,29 @@ func (s *stdHTTPServer) ListenAndServe() error {
 
 func (s *stdHTTPServer) Shutdown(ctx context.Context) error {
 	return s.server.Shutdown(ctx)
+}
+
+func maybeStartMetricsServer(ctx context.Context, addr string, metrics *observability.Metrics) (*http.Server, func()) {
+	if addr == "" {
+		return nil, func() {}
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", metrics.Handler())
+	server := &http.Server{Addr: addr, Handler: mux}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}()
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("worker metrics server failed", "error", err.Error())
+		}
+	}()
+	return server, func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}
 }

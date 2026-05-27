@@ -1,0 +1,144 @@
+{
+  "uid": "avatar-business-kpis",
+  "title": "Avatar Business KPIs",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["avatar-service", "business"],
+  "timezone": "browser",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "query": "label_values(up{job=~\"avatar-service-.*\"}, job)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {"selected": true, "text": "All", "value": "$__all"}
+      },
+      {
+        "name": "routing_key",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "query": "label_values(avatar_worker_messages_total, routing_key)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {"selected": true, "text": "All", "value": "$__all"}
+      },
+      {
+        "name": "interval",
+        "type": "interval",
+        "query": "1m,5m,15m,30m,1h",
+        "current": {"text": "$__rate_interval", "value": "$__rate_interval"}
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Upload traces",
+      "type": "link",
+      "url": "/explore?left={\"datasource\":\"jaeger\",\"queries\":[{\"service\":\"avatar-service-server\",\"operation\":\"POST /api/v1/avatars\"}]}"
+    },
+    {
+      "title": "Application errors",
+      "type": "link",
+      "url": "/explore?left={\"datasource\":\"loki\",\"queries\":[{\"expr\":\"{service_name=~\\\"avatar-service-.*\\\", severity_text=~\\\"ERROR|error\\\"}\"}]}"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Upload rate by status",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {"expr": "sum by (status) (rate(avatars_uploads_total[$interval]))", "legendFormat": "{{status}}"}
+      ],
+      "links": [
+        {"title": "View upload traces", "url": "/explore?left={\"datasource\":\"jaeger\",\"queries\":[{\"service\":\"avatar-service-server\",\"operation\":\"POST /api/v1/avatars\"}]}"}
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Upload error ratio",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "targets": [
+        {"expr": "sum(rate(avatars_uploads_total{status=\"error\"}[$interval])) / clamp_min(sum(rate(avatars_uploads_total[$interval])), 1)", "legendFormat": "error ratio"}
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Upload duration p95",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, status) (rate(avatars_upload_duration_seconds_bucket[$interval])))", "legendFormat": "{{status}}"}
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Storage bytes by kind",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "targets": [
+        {"expr": "sum by (kind) (avatars_storage_bytes)", "legendFormat": "{{kind}}"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Delete rate by status",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {"expr": "sum by (status) (rate(avatars_deletes_total[$interval]))", "legendFormat": "{{status}}"}
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Worker messages by routing key",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {"expr": "sum by (routing_key, status) (rate(avatar_worker_messages_total{routing_key=~\"$routing_key\"}[$interval]))", "legendFormat": "{{routing_key}} {{status}}"}
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Worker processing p95",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, routing_key) (rate(avatar_worker_processing_duration_seconds_bucket{routing_key=~\"$routing_key\"}[$interval])))", "legendFormat": "{{routing_key}}"}
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Thumbnail generation by size",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "targets": [
+        {"expr": "sum by (size, status) (rate(avatar_worker_thumbnail_generation_total[$interval]))", "legendFormat": "{{size}} {{status}}"}
+      ]
+    }
+  ]
+}

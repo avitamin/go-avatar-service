@@ -8,10 +8,11 @@ HTTP_ADDR ?= $(LOCAL_HTTP_ADDR)
 BASE_URL ?= $(LOCAL_BASE_URL)
 COMPOSE ?= docker compose
 COMPOSE_FILE ?= docker-compose.yml
+OBSERVABILITY_COMPOSE_FILES ?= -f docker-compose.yml -f docker-compose.observability.yml
 COMPOSE_HTTP_PORT ?= 8080
 COMPOSE_BASE_URL ?= http://localhost:$(COMPOSE_HTTP_PORT)
 
-.PHONY: test bench bench-external build build-server build-worker build-contract-tests contract-tests run-server run-worker migrate-up migrate-down migrate-status docker-build docker-up docker-up-build docker-up-detached docker-down docker-down-volumes docker-ps docker-logs docker-contract-tests
+.PHONY: test bench bench-external build build-server build-worker build-contract-tests contract-tests run-server run-worker migrate-up migrate-down migrate-status docker-build docker-up docker-up-build docker-up-detached docker-down docker-down-volumes docker-ps docker-logs docker-contract-tests docker-observability-up docker-observability-down docker-observability-logs docker-observability-ps
 
 test:
 	go test ./...
@@ -79,3 +80,15 @@ docker-logs:
 
 docker-contract-tests: build-contract-tests
 	$(MAKE) contract-tests BASE_URL="$(COMPOSE_BASE_URL)"
+
+docker-observability-up:
+	$(COMPOSE) $(OBSERVABILITY_COMPOSE_FILES) up -d --build
+
+docker-observability-down:
+	$(COMPOSE) $(OBSERVABILITY_COMPOSE_FILES) down
+
+docker-observability-logs:
+	$(COMPOSE) $(OBSERVABILITY_COMPOSE_FILES) logs -f
+
+docker-observability-ps:
+	$(COMPOSE) $(OBSERVABILITY_COMPOSE_FILES) ps

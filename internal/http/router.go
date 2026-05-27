@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -14,32 +13,64 @@ import (
 
 	"go-avatar-service/internal/domain"
 	"go-avatar-service/internal/imageproc"
+	"go-avatar-service/internal/observability"
 	"go-avatar-service/internal/service"
 )
 
 // MaxUploadBytes is the maximum accepted upload size for original images.
 const MaxUploadBytes = 10 * 1024 * 1024
 
-// NewRouter wires the public HTTP API, web pages, and health endpoint.
-func NewRouter(svc *service.AvatarService, health service.RuntimeHealthChecker) http.Handler {
+// RouterOption customizes router wiring.
+type RouterOption func(*routerConfig)
+
+type routerConfig struct {
+	observability observability.RouterOptions
+}
+
+// WithObservability configures HTTP logs, metrics, and traces.
+func WithObservability(opts observability.RouterOptions) RouterOption {
+	return func(cfg *routerConfig) {
+		cfg.observability = opts
+	}
+}
+
+// NewRouter wires the public HTTP API, web pages, metrics, and health endpoint.
+func NewRouter(svc *service.AvatarService, health service.RuntimeHealthChecker, opts ...RouterOption) http.Handler {
+	var cfg routerConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	r := chi.NewRouter()
-	h := &handler{svc: svc, healthSvc: health}
+	r.Use(observability.HTTPMiddleware(cfg.observability))
+	h := &handler{svc: svc, healthSvc: health, metrics: cfg.observability.Metrics}
 	r.Get("/health", h.health)
-	r.Post("/api/v1/avatars", h.upload)
-	r.Get("/api/v1/avatars/{avatar_id}", h.readAvatar)
-	r.Get("/api/v1/avatars/{avatar_id}/metadata", h.metadata)
-	r.Delete("/api/v1/avatars/{avatar_id}", h.deleteAvatar)
-	r.Get("/api/v1/users/{user_id}/avatars", h.listUserAvatars)
-	r.Get("/api/v1/users/{user_id}/avatar", h.readUserAvatar)
-	r.Delete("/api/v1/users/{user_id}/avatar", h.deleteUserAvatar)
+	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		cfg.observability.Metrics.Handler().ServeHTTP(w, r)
+	})
+	r.Route("/api", func(r chi.Router) {
+		r.Route("/v1", func(r chi.Router) {
+			r.Route("/avatars", func(r chi.Router) {
+				r.Post("/", h.upload)
+				r.Get("/{avatar_id}", h.readAvatar)
+				r.Get("/{avatar_id}/metadata", h.metadata)
+				r.Delete("/{avatar_id}", h.deleteAvatar)
+			})
+			r.Route("/users", func(r chi.Router) {
+				r.Get("/{user_id}/avatars", h.listUserAvatars)
+				r.Get("/{user_id}/avatar", h.readUserAvatar)
+				r.Delete("/{user_id}/avatar", h.deleteUserAvatar)
+			})
+		})
+	})
 	r.Get("/web/upload", h.webUpload)
 	r.Get("/web/gallery/{user_id}", h.webGallery)
-	return accessLog(r)
+	return r
 }
 
 type handler struct {
 	svc       *service.AvatarService
 	healthSvc service.RuntimeHealthChecker
+	metrics   *observability.Metrics
 }
 
 func (h *handler) health(w http.ResponseWriter, r *http.Request) {
@@ -48,38 +79,51 @@ func (h *handler) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) upload(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	mime := "unknown"
+	recordRejectedUpload := func() {
+		h.metrics.ObserveAvatarUpload("error", mime, time.Since(start))
+	}
 	userID := r.Header.Get("X-User-ID")
 	if err := domain.ValidateUserID(userID); err != nil {
+		recordRejectedUpload()
 		writeError(w, http.StatusBadRequest, "invalid_user_id", "Invalid X-User-ID", nil)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadBytes+1024*1024)
 	if err := r.ParseMultipartForm(MaxUploadBytes + 1); err != nil {
+		recordRejectedUpload()
 		writeError(w, http.StatusBadRequest, "invalid_multipart", "Invalid multipart form", nil)
 		return
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
+		recordRejectedUpload()
 		writeError(w, http.StatusBadRequest, "file_required", "Multipart field file is required", nil)
 		return
 	}
 	defer func() { _ = file.Close() }()
 	data, err := io.ReadAll(io.LimitReader(file, MaxUploadBytes+1))
 	if err != nil {
+		recordRejectedUpload()
 		writeError(w, http.StatusBadRequest, "read_file_failed", "Could not read uploaded file", nil)
 		return
 	}
 	if len(data) > MaxUploadBytes {
+		recordRejectedUpload()
 		writeError(w, http.StatusRequestEntityTooLarge, "file_too_large", "File is larger than 10 MB", nil)
 		return
 	}
-	mime, err := imageproc.Sniff(data)
+	sniffedMime, err := imageproc.Sniff(data)
 	if err != nil {
+		recordRejectedUpload()
 		writeError(w, http.StatusBadRequest, "unsupported_image", "Unsupported image bytes", nil)
 		return
 	}
+	mime = sniffedMime
 	if mime != "image/webp" {
 		if _, err := imageproc.Decode(data, mime); err != nil {
+			recordRejectedUpload()
 			writeError(w, http.StatusBadRequest, "invalid_image", "Image cannot be decoded", nil)
 			return
 		}
@@ -225,29 +269,6 @@ func writeError(w http.ResponseWriter, status int, code, message string, details
 		payload["error"].(map[string]any)["details"] = details
 	}
 	writeJSON(w, status, payload)
-}
-
-type statusWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *statusWriter) WriteHeader(code int) {
-	w.status = code
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func accessLog(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(sw, r)
-		requestID := r.Header.Get("X-Request-ID")
-		if requestID == "" {
-			requestID = r.Header.Get("X-Correlation-ID")
-		}
-		slog.Info("http access", "method", r.Method, "path", r.URL.Path, "status", sw.status, "duration", time.Since(start).String(), "request_id", requestID)
-	})
 }
 
 // UploadPageHTML returns the embedded upload page markup.

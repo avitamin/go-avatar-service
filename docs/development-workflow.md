@@ -22,6 +22,14 @@ make docker-contract-tests
 
 Локальный `make run-server` по умолчанию слушает `http://localhost:18080`. Docker Compose публикует server на `http://localhost:8080`.
 
+Быстрая проверка observability для любого запущенного server:
+
+```bash
+curl -fsS "$BASE_URL/health"
+curl -fsS "$BASE_URL/metrics"
+curl -fsS -H 'X-Request-ID: manual-observability-check' "$BASE_URL/health"
+```
+
 ## Local Development
 
 Базовые команды:
@@ -119,6 +127,26 @@ make docker-contract-tests
 docker compose up -d server worker
 ```
 
+После `make docker-contract-tests` можно проверить Prometheus metrics на server:
+
+```bash
+curl -fsS http://localhost:8080/metrics | rg '^(http_requests_total|avatars_uploads_total|avatars_deletes_total|avatar_dependency_operations_total)'
+```
+
+Проверка JSON access logs и trace correlation:
+
+```bash
+curl -fsS -H 'X-Request-ID: manual-observability-check' http://localhost:8080/health
+docker compose logs --tail=40 server worker
+```
+
+Ожидаемые признаки:
+
+- `server` logs содержат `service`, `component`, `trace_id`, `span_id`, `route`, `status`; для запроса выше также `request_id`.
+- `worker` logs для thumbnail/delete событий содержат `trace_id` и `span_id`.
+- Для upload/delete через RabbitMQ `trace_id` в worker log совпадает с `trace_id` исходного server log.
+- HTTP metrics используют route templates, например `/api/v1/avatars/{avatar_id}`, без raw `avatar_id` или `user_id` в labels.
+
 ## Ports and Overrides
 
 Текущие defaults:
@@ -199,6 +227,72 @@ make contract-tests BASE_URL="$LOCAL_BASE_URL"
 ```
 
 Для Compose `.env` понадобится только compose-префикс. Если вы перенаправляете полный вывод скрипта в `.env`, строки `LOCAL_*` будут проигнорированы `docker compose`, но останутся доступны для shell tooling.
+
+## Конфигурация observability
+
+Runtime observability env vars:
+
+| Env var | Default | Используется | Назначение |
+| --- | --- | --- | --- |
+| `SERVICE_NAME` | `avatar-service` | `server`, `worker` | `service` field в logs и OpenTelemetry resource attribute |
+| `SERVICE_VERSION` | empty | `server`, `worker` | optional OpenTelemetry resource attribute |
+| `OTEL_TRACES_ENABLED` | `true` | `server`, `worker` | включает создание spans |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | empty | `server`, `worker` | OTLP/gRPC endpoint; если пусто, spans не экспортируются |
+| `METRICS_ADDR` | empty | `worker` | адрес отдельного worker metrics HTTP server |
+
+Server metrics всегда доступны на основном HTTP server endpoint `GET /metrics`.
+
+Worker metrics поднимаются только если задан `METRICS_ADDR`. Текущий `docker-compose.yml` не публикует worker metrics port по умолчанию; для проверки worker metrics добавьте `METRICS_ADDR` и port mapping в локальный compose override или временно запустите worker вне Compose с нужным env.
+
+Для локального observability stack используйте отдельный Compose override:
+
+```bash
+set -a
+eval "$(scripts/find-free-ports.sh)"
+set +a
+make docker-observability-up
+docker compose run --rm server migrate up
+make docker-contract-tests
+```
+
+`scripts/find-free-ports.sh` выводит и базовые compose-порты, и порты observability stack. `set -a` нужен, чтобы `docker compose` получил эти значения как environment overrides поверх `.env`.
+
+Этот stack добавляет Prometheus, OpenTelemetry Collector, Jaeger, Loki, Grafana, `node-exporter`, `postgres-exporter` и RabbitMQ Prometheus metrics endpoint. Базовые UI/API endpoints при значениях из `.env.example`:
+
+| Endpoint | URL |
+| --- | --- |
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3000` |
+| Jaeger | `http://localhost:16686` |
+| Loki API | `http://localhost:3100` |
+| OpenTelemetry Collector gRPC | `localhost:4317` |
+| OpenTelemetry Collector HTTP | `localhost:4318` |
+| RabbitMQ metrics | `http://localhost:15692/metrics` |
+
+Server и worker отправляют traces и logs в Collector через OTLP/gRPC. Collector экспортирует traces в Jaeger, logs в Loki через native OTLP endpoint, а Prometheus scrapes `server:8080/metrics`, `worker:9091/metrics`, `node-exporter:9100`, `postgres-exporter:9187` и `rabbitmq:15692`.
+
+Grafana автоматически подхватывает provisioned datasources `Prometheus`, `Jaeger`, `Loki` и dashboards из folder `Avatar Service`: `Avatar Service Overview`, `Avatar Business KPIs`, `Avatar Infrastructure`.
+
+Для проверки после contract tests:
+
+```bash
+curl -fsS http://localhost:9090/api/v1/targets
+curl -fsS "http://localhost:3100/loki/api/v1/labels"
+```
+
+В Prometheus targets должны быть healthy `avatar-service-server`, `avatar-service-worker`, `node-exporter`, `postgres` и `rabbitmq`. В Jaeger ищите service `avatar-service-server`; в Grafana доступны datasources `Prometheus`, `Jaeger`, `Loki`. На Docker Desktop host-level metrics от `node-exporter` могут отражать Linux VM/container host, а не полную macOS/Windows host-систему.
+
+Prometheus metric groups:
+
+- HTTP: `http_requests_total`, `http_request_duration_seconds`, `http_inflight_requests`.
+- Business: `avatars_uploads_total`, `avatars_upload_duration_seconds`, `avatars_deletes_total`, `avatars_storage_bytes`.
+- Worker: `avatar_worker_messages_total`, `avatar_worker_processing_duration_seconds`, `avatar_worker_thumbnail_generation_total`.
+- Dependencies: `avatar_dependency_operations_total`, `avatar_dependency_operation_duration_seconds`.
+
+Label policy:
+
+- Use bounded labels such as `method`, `route`, `status`, `component`, `operation`, `routing_key`, `mime_type`, and thumbnail `size`.
+- Do not use `user_id`, `avatar_id`, raw object keys, request bodies, file bytes, credentials, or DSNs in metric labels or logs.
 
 ## JetBrains Run Configurations
 

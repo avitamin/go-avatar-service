@@ -1,0 +1,11 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: "local-webhook"
+
+receivers:
+  - name: "local-webhook"
+    webhook_configs:
+      - url: "http://host.docker.internal:9094/alerts"
+        send_resolved: true

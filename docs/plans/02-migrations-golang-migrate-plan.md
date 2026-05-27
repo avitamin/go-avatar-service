@@ -1,5 +1,17 @@
 # Переход миграций на `golang-migrate/migrate`
 
+## Статус реализации
+
+Статус: реализовано в коде приложения.
+
+Подтверждено:
+
+- `go.mod` содержит `github.com/golang-migrate/migrate/v4`.
+- `internal/app/migrate.go` реализует `avatars-service migrate up|down|status` через `golang-migrate`.
+- `migrate status` читает version/dirty state migration engine и возвращает `pending`, `ok version=<n> dirty=false` или `dirty version=<n>`.
+- `README.md` и `Makefile` описывают explicit migration step без автозапуска при старте `server` или `worker`.
+- Unit/integration coverage находится в `internal/app/migrate_test.go` и `internal/app/migrate_integration_test.go`.
+
 ## Источники информации
 
 - Подтвержденные требования: [docs/requirements/confirmed-requirements.md](../requirements/confirmed-requirements.md)

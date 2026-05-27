@@ -26,7 +26,7 @@ Acceptance criteria:
 
 Ограничения:
 - Работай через TDD: сначала failing test, затем минимальная реализация, затем refactor при зеленых тестах.
-- Следуй confirmed requirements поверх README/QWEN.
+- Следуй confirmed requirements поверх README.
 - Не добавляй non-MVP возможности без необходимости.
 - Не ограничивайся общей метрикой покрытия: target `>50%` не заменяет тесты конкретных обязательных требований в scope задачи.
 - Сохраняй Go conventions и запускай gofmt для измененных Go-файлов.

@@ -7,6 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+
+	"go-avatar-service/internal/observability"
 )
 
 const (
@@ -20,6 +29,7 @@ const (
 type Delivery struct {
 	RoutingKey string
 	Body       []byte
+	Headers    map[string]any
 	Ack        func() error
 	Nack       func(requeue bool) error
 }
@@ -36,14 +46,29 @@ type Runner struct {
 	upload   *UploadHandler
 	delete   *DeleteHandler
 	log      *slog.Logger
+	metrics  *observability.Metrics
+}
+
+// Option customizes runner wiring.
+type Option func(*Runner)
+
+// WithObservability configures worker metrics and trace propagation.
+func WithObservability(metrics *observability.Metrics) Option {
+	return func(r *Runner) {
+		r.metrics = metrics
+	}
 }
 
 // NewRunner creates a Runner with the provided consumer and handlers.
-func NewRunner(consumer Consumer, upload *UploadHandler, delete *DeleteHandler, log *slog.Logger) *Runner {
+func NewRunner(consumer Consumer, upload *UploadHandler, delete *DeleteHandler, log *slog.Logger, opts ...Option) *Runner {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Runner{consumer: consumer, upload: upload, delete: delete, log: log}
+	r := &Runner{consumer: consumer, upload: upload, delete: delete, log: log}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 // Run consumes deliveries until the consumer closes or the context is canceled.
@@ -58,7 +83,8 @@ func (r *Runner) Run(ctx context.Context) error {
 	defer r.consumer.Close()
 	for delivery := range deliveries {
 		if err := r.handle(ctx, delivery); err != nil {
-			r.log.Error("worker message failed", "routing_key", delivery.RoutingKey, "error", err.Error())
+			msgCtx := extractContext(ctx, delivery.Headers)
+			r.log.ErrorContext(msgCtx, "worker message failed", observability.Attrs(msgCtx, "routing_key", delivery.RoutingKey, "error", err.Error())...)
 			if delivery.Nack != nil {
 				_ = delivery.Nack(true)
 			}
@@ -75,23 +101,70 @@ func (r *Runner) Run(ctx context.Context) error {
 }
 
 func (r *Runner) handle(ctx context.Context, delivery Delivery) error {
+	start := time.Now()
+	ctx = extractContext(ctx, delivery.Headers)
+	ctx, span := otel.Tracer("avatar-service/worker").Start(ctx, "worker handle "+delivery.RoutingKey)
+	defer span.End()
+	span.SetAttributes(attribute.String("messaging.rabbitmq.routing_key", delivery.RoutingKey))
+	status := "success"
+	defer func() {
+		r.metrics.ObserveWorkerMessage(delivery.RoutingKey, status, time.Since(start))
+	}()
 	switch delivery.RoutingKey {
 	case RoutingKeyUploaded:
 		id, err := parseAvatarID(delivery.Body)
 		if err != nil {
+			status = "error"
+			recordWorkerError(span, err)
 			return err
 		}
-		return r.upload.Handle(ctx, UploadEvent{AvatarID: id})
+		err = r.upload.Handle(ctx, UploadEvent{AvatarID: id})
+		if err != nil {
+			status = "error"
+			recordWorkerError(span, err)
+			return err
+		}
+		return nil
 	case RoutingKeyDeleteRequested:
 		id, err := parseAvatarID(delivery.Body)
 		if err != nil {
+			status = "error"
+			recordWorkerError(span, err)
 			return err
 		}
-		return r.delete.Handle(ctx, DeleteEvent{AvatarID: id})
+		err = r.delete.Handle(ctx, DeleteEvent{AvatarID: id})
+		if err != nil {
+			status = "error"
+			recordWorkerError(span, err)
+			return err
+		}
+		return nil
 	default:
-		r.log.Warn("unknown worker routing key", "routing_key", delivery.RoutingKey)
+		status = "ignored"
+		r.log.WarnContext(ctx, "unknown worker routing key", observability.Attrs(ctx, "routing_key", delivery.RoutingKey)...)
 		return nil
 	}
+}
+
+func extractContext(ctx context.Context, headers map[string]any) context.Context {
+	if len(headers) == 0 {
+		return ctx
+	}
+	carrier := propagation.MapCarrier{}
+	for key, value := range headers {
+		if s, ok := value.(string); ok {
+			carrier.Set(key, s)
+		}
+	}
+	return propagation.TraceContext{}.Extract(ctx, carrier)
+}
+
+func recordWorkerError(span trace.Span, err error) {
+	if err == nil {
+		return
+	}
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
 }
 
 func parseAvatarID(body []byte) (string, error) {

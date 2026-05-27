@@ -1,0 +1,124 @@
+services:
+  server:
+    restart: on-failure
+    environment:
+      SERVICE_NAME: "avatar-service-server"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "otel-collector:4317"
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_TRACES_ENABLED: "true"
+      OTEL_LOGS_ENABLED: "true"
+    depends_on:
+      - otel-collector
+
+  worker:
+    restart: on-failure
+    environment:
+      SERVICE_NAME: "avatar-service-worker"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "otel-collector:4317"
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_TRACES_ENABLED: "true"
+      OTEL_LOGS_ENABLED: "true"
+      METRICS_ADDR: ":9091"
+    depends_on:
+      - otel-collector
+
+  rabbitmq:
+    command:
+      - sh
+      - -c
+      - rabbitmq-plugins enable --offline rabbitmq_prometheus && rabbitmq-server
+    ports:
+      - "${COMPOSE_RABBITMQ_METRICS_PORT:-15692}:15692"
+
+  prometheus:
+    image: prom/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    volumes:
+      - ./configs/observability/prometheus:/etc/prometheus:ro
+    ports:
+      - "${COMPOSE_PROMETHEUS_PORT:-9090}:9090"
+    depends_on:
+      - alertmanager
+      - server
+      - worker
+      - node-exporter
+      - postgres-exporter
+      - rabbitmq
+
+  alertmanager:
+    image: prom/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./configs/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "${COMPOSE_ALERTMANAGER_PORT:-9093}:9093"
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://avatars:avatars@postgres:5432/avatars?sslmode=disable"
+    depends_on:
+      - postgres
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib
+    command:
+      - "--config=/etc/otelcol/config.yml"
+    volumes:
+      - ./configs/observability/otel-collector/config.yml:/etc/otelcol/config.yml:ro
+    ports:
+      - "${COMPOSE_OTEL_COLLECTOR_GRPC_PORT:-4317}:4317"
+      - "${COMPOSE_OTEL_COLLECTOR_HTTP_PORT:-4318}:4318"
+    depends_on:
+      - jaeger
+      - loki
+
+  jaeger:
+    image: jaegertracing/all-in-one
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "${COMPOSE_JAEGER_UI_PORT:-16686}:16686"
+
+  loki:
+    image: grafana/loki
+    command:
+      - "-config.file=/etc/loki/loki.yml"
+    volumes:
+      - ./configs/observability/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    ports:
+      - "${COMPOSE_LOKI_PORT:-3100}:3100"
+
+  grafana:
+    image: grafana/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: "admin"
+      GF_SECURITY_ADMIN_PASSWORD: "admin"
+    volumes:
+      - ./configs/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./configs/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "${COMPOSE_GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+      - jaeger
+      - loki
+
+  node-exporter:
+    image: prom/node-exporter
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+volumes:
+  loki-data:

@@ -19,7 +19,7 @@ Use this prompt when asking an AI agent to implement the MVP of `go-avatar-servi
 - При работе над HTTP/API читай docs/prompts/agents/backend-implementer.md
 - При работе над worker читай docs/prompts/agents/worker-implementer.md
 - При работе над тестами читай docs/prompts/agents/tester.md
-- Если confirmed requirements или v1 spec конфликтуют с README/QWEN/исходным ТЗ, следуй confirmed requirements и v1 spec.
+- Если confirmed requirements или v1 spec конфликтуют с README/исходным ТЗ, следуй confirmed requirements и v1 spec.
 
 Текущая точка старта:
 - Репозиторий является skeleton: cmd/server, cmd/worker, web/static/index.html, go.mod.
@@ -39,7 +39,7 @@ Use this prompt when asking an AI agent to implement the MVP of `go-avatar-servi
 Общий TDD workflow для каждого инкремента:
 1. Explore
    - Найди фактические entrypoints, соседний код, тесты и документацию.
-   - Не полагайся на README/QWEN как на более актуальные источники.
+   - Не полагайся на README как на более актуальный источник.
 
 2. Test first
    - Сначала добавь focused test для ожидаемого поведения.
