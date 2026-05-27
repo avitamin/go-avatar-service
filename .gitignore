@@ -31,6 +31,9 @@
 # Local Codex configuration
 /.codex/config.toml
 
+# Local non-committed artifacts
+/.local/
+
 # Compiled binary
 /app
 /bin/
