@@ -4,11 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	otellog "go.opentelemetry.io/otel/log"
@@ -116,6 +121,70 @@ func TestRequestIDHelpers(t *testing.T) {
 	if got := RequestID(context.Background()); got != "" {
 		t.Fatalf("empty RequestID() = %q, want empty", got)
 	}
+}
+
+func TestHTTPMiddlewareCountsInflightWhileHandlerIsRunning(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	metrics := NewMetrics(reg)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseHandler := func() {
+		releaseOnce.Do(func() {
+			close(release)
+		})
+	}
+	clientDone := make(chan error, 1)
+	handler := HTTPMiddleware(RouterOptions{Metrics: metrics})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(entered)
+		<-release
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	defer releaseHandler()
+
+	go func() {
+		resp, err := http.Get(server.URL + "/slow")
+		if err != nil {
+			clientDone <- err
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			clientDone <- errors.New("unexpected response status")
+			return
+		}
+		clientDone <- nil
+	}()
+
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler was not entered")
+	}
+	if got := metricsText(t, metrics); !strings.Contains(got, `http_inflight_requests{method="GET",route="/slow"} 1`) {
+		t.Fatalf("in-flight metric while handler is running missing or incorrect:\n%s", got)
+	}
+	releaseHandler()
+	select {
+	case err := <-clientDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("client request did not finish")
+	}
+	if got := metricsText(t, metrics); strings.Contains(got, `http_inflight_requests{method="GET",route="/slow"} 1`) {
+		t.Fatalf("in-flight metric still reports completed handler:\n%s", got)
+	}
+}
+
+func metricsText(t *testing.T, metrics *Metrics) string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	return rec.Body.String()
 }
 
 func TestNewLoggerDefaultsOutput(t *testing.T) {

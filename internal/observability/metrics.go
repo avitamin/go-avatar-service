@@ -3,6 +3,7 @@ package observability
 import (
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -16,6 +17,8 @@ type Metrics struct {
 	httpRequests *prometheus.CounterVec
 	httpDuration *prometheus.HistogramVec
 	httpInflight *prometheus.GaugeVec
+	inflightMu   sync.Mutex
+	inflightRefs map[string]int
 
 	avatarUploads      *prometheus.CounterVec
 	avatarUploadDur    *prometheus.HistogramVec
@@ -48,6 +51,7 @@ func NewMetrics(reg *prometheus.Registry) *Metrics {
 			Name: "http_inflight_requests",
 			Help: "In-flight HTTP requests.",
 		}, []string{"method", "route"}),
+		inflightRefs: make(map[string]int),
 		avatarUploads: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "avatars_uploads_total",
 			Help: "Total avatar uploads.",
@@ -115,14 +119,23 @@ func (m *Metrics) IncHTTPInflight(method, route string) func() {
 	if m == nil {
 		return func() {}
 	}
+	key := method + "\x00" + route
+	m.inflightMu.Lock()
+	m.inflightRefs[key]++
+	m.inflightMu.Unlock()
 	m.httpInflight.WithLabelValues(method, route).Inc()
-	return func() { m.httpInflight.WithLabelValues(method, route).Dec() }
-}
-
-// IncAvatarUpload records an avatar upload outcome.
-func (m *Metrics) IncAvatarUpload(status, mimeType string) {
-	if m != nil {
-		m.avatarUploads.WithLabelValues(status, mimeType).Inc()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			m.httpInflight.WithLabelValues(method, route).Dec()
+			m.inflightMu.Lock()
+			m.inflightRefs[key]--
+			if m.inflightRefs[key] <= 0 {
+				delete(m.inflightRefs, key)
+				m.httpInflight.DeleteLabelValues(method, route)
+			}
+			m.inflightMu.Unlock()
+		})
 	}
 }
 

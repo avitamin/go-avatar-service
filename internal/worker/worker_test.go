@@ -3,11 +3,13 @@ package worker
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"log/slog"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -45,8 +47,8 @@ func TestUploadHandlerSuccessDuplicateMissingOriginalAndRetry(t *testing.T) {
 
 	missing, _ := svc.Upload(ctx, service.UploadInput{UserID: "user-1", FileName: "b.jpg", Content: encodeJPEG(t), ContentType: "image/jpeg"})
 	storage.Delete(ctx, "avatars/"+missing.ID+"/original.jpg")
-	if err := h.Handle(ctx, UploadEvent{AvatarID: missing.ID}); err != nil {
-		t.Fatalf("missing original Handle() error = %v", err)
+	if err := h.Handle(ctx, UploadEvent{AvatarID: missing.ID}); err == nil {
+		t.Fatal("missing original Handle() error = nil, want error for worker retry")
 	}
 	a, _ = repo.GetActiveByID(ctx, missing.ID)
 	if a.Status != domain.StatusFailed {
@@ -156,6 +158,29 @@ func TestRunnerNacksHandlerErrors(t *testing.T) {
 	}
 }
 
+func TestUploadHandlerReturnsStorageErrorsForRetry(t *testing.T) {
+	ctx := context.Background()
+	repo := service.NewMemoryRepository()
+	baseStorage := service.NewMemoryStorage()
+	svc := service.NewAvatarService(repo, baseStorage, nil)
+	created, _ := svc.Upload(ctx, service.UploadInput{UserID: "user-1", FileName: "a.jpg", Content: encodeJPEG(t), ContentType: "image/jpeg"})
+
+	storage := &failingPutStorage{Storage: baseStorage, err: errors.New("storage down")}
+	var logs bytes.Buffer
+	h := NewUploadHandler(repo, storage, slog.New(slog.NewJSONHandler(&logs, nil)))
+	err := h.Handle(ctx, UploadEvent{AvatarID: created.ID})
+	if err == nil {
+		t.Fatal("Handle() error = nil, want storage error for worker retry")
+	}
+	if !bytes.Contains(logs.Bytes(), []byte("store thumbnail failed")) {
+		t.Fatalf("storage put error was not logged: %s", logs.String())
+	}
+	a, _ := repo.GetActiveByID(ctx, created.ID)
+	if a.Status != domain.StatusFailed {
+		t.Fatalf("failed thumbnail storage status = %q, want failed", a.Status)
+	}
+}
+
 func TestRunnerObservabilityExtractsTraceAndCountsMessages(t *testing.T) {
 	ctx := context.Background()
 	reg := prometheus.NewRegistry()
@@ -196,6 +221,18 @@ func TestRunnerObservabilityExtractsTraceAndCountsMessages(t *testing.T) {
 type stubConsumer struct {
 	deliveries <-chan Delivery
 	closed     bool
+}
+
+type failingPutStorage struct {
+	service.Storage
+	err error
+}
+
+func (s *failingPutStorage) Put(ctx context.Context, key string, data []byte, mime string) error {
+	if strings.Contains(key, "/thumb_") {
+		return s.err
+	}
+	return s.Storage.Put(ctx, key, data, mime)
 }
 
 func (c *stubConsumer) Consume(context.Context) (<-chan Delivery, error) { return c.deliveries, nil }

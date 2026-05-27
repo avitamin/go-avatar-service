@@ -121,9 +121,9 @@ func TestObservabilityStackConfiguresAlerting(t *testing.T) {
 	}
 
 	alertmanager := string(readFile(t, filepath.Join(root, "configs/observability/alertmanager/alertmanager.yml")))
-	for _, want := range []string{"receiver: \"null\"", "name: \"null\""} {
+	for _, want := range []string{"receiver: \"local-webhook\"", "name: \"local-webhook\"", "webhook_configs:", "send_resolved: true"} {
 		if !strings.Contains(alertmanager, want) {
-			t.Fatalf("alertmanager config missing null receiver %q", want)
+			t.Fatalf("alertmanager config missing local webhook receiver %q", want)
 		}
 	}
 }
@@ -131,7 +131,8 @@ func TestObservabilityStackConfiguresAlerting(t *testing.T) {
 func TestObservabilityStackRunsAlertmanager(t *testing.T) {
 	root := repoRoot(t)
 
-	composeText := string(readFile(t, filepath.Join(root, "docker-compose.observability.yml")))
+	composeBody := readFile(t, filepath.Join(root, "docker-compose.observability.yml"))
+	composeText := string(composeBody)
 	for _, want := range []string{
 		"alertmanager:",
 		"prom/alertmanager",
@@ -141,6 +142,32 @@ func TestObservabilityStackRunsAlertmanager(t *testing.T) {
 		if !strings.Contains(composeText, want) {
 			t.Fatalf("observability compose missing alertmanager setting %q", want)
 		}
+	}
+	var compose map[string]any
+	if err := yaml.Unmarshal(composeBody, &compose); err != nil {
+		t.Fatalf("observability compose must be valid YAML: %v", err)
+	}
+	services, ok := compose["services"].(map[string]any)
+	if !ok {
+		t.Fatalf("observability compose must define services")
+	}
+	alertmanager, ok := services["alertmanager"].(map[string]any)
+	if !ok {
+		t.Fatalf("observability compose must define alertmanager service")
+	}
+	extraHosts, ok := alertmanager["extra_hosts"].([]any)
+	if !ok {
+		t.Fatalf("alertmanager service must define extra_hosts")
+	}
+	hasHostGateway := false
+	for _, host := range extraHosts {
+		if host == "host.docker.internal:host-gateway" {
+			hasHostGateway = true
+			break
+		}
+	}
+	if !hasHostGateway {
+		t.Fatalf("alertmanager extra_hosts must include host.docker.internal:host-gateway")
 	}
 
 	envExample := string(readFile(t, filepath.Join(root, ".env.example")))

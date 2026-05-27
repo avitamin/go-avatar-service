@@ -51,6 +51,9 @@ func TestMetricsEndpointAndRouteLabels(t *testing.T) {
 	if !strings.Contains(text, `route="/health"`) {
 		t.Fatalf("metrics missing route template label:\n%s", text)
 	}
+	if strings.Contains(text, `route="unknown"`) {
+		t.Fatalf("metrics must not use unknown route labels:\n%s", text)
+	}
 }
 
 func TestMetricsUseRouteTemplateForDynamicRoutes(t *testing.T) {

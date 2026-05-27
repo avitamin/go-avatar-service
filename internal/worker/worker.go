@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -52,6 +53,9 @@ func NewUploadHandler(repo service.Repository, storage service.Storage, log *slo
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+	if log == nil {
+		log = slog.Default()
+	}
 	return &UploadHandler{repo: repo, storage: storage, log: log, metrics: cfg.metrics}
 }
 
@@ -59,7 +63,11 @@ func NewUploadHandler(repo service.Repository, storage service.Storage, log *slo
 func (h *UploadHandler) Handle(ctx context.Context, event UploadEvent) error {
 	a, err := h.repo.GetActiveByID(ctx, event.AvatarID)
 	if err != nil {
-		return nil
+		if errors.Is(err, service.ErrNotFound) {
+			h.log.InfoContext(ctx, "duplicate upload event", observability.Attrs(ctx, "avatar_id", event.AvatarID)...)
+			return nil
+		}
+		return err
 	}
 	if a.Status == domain.StatusCompleted && a.Thumb100Available && a.Thumb300Available {
 		h.log.InfoContext(ctx, "duplicate upload event", observability.Attrs(ctx, "avatar_id", event.AvatarID)...)
@@ -69,7 +77,7 @@ func (h *UploadHandler) Handle(ctx context.Context, event UploadEvent) error {
 	if err != nil {
 		_ = h.repo.UpdateProcessingResult(ctx, a.ID, "", "")
 		h.log.ErrorContext(ctx, "missing original", observability.Attrs(ctx, "avatar_id", event.AvatarID, "error", err.Error())...)
-		return nil
+		return fmt.Errorf("get original: %w", err)
 	}
 	var thumb100, thumb300 []byte
 	if err := Retry(ctx, 2, func() error {
@@ -83,7 +91,8 @@ func (h *UploadHandler) Handle(ctx context.Context, event UploadEvent) error {
 		return err
 	}); err != nil {
 		_ = h.repo.UpdateProcessingResult(ctx, a.ID, "", "")
-		return nil
+		h.log.ErrorContext(ctx, "thumbnail generation failed", observability.Attrs(ctx, "avatar_id", a.ID, "size", "100x100", "error", err.Error())...)
+		return fmt.Errorf("generate 100x100 thumbnail: %w", err)
 	}
 	if err := Retry(ctx, 2, func() error {
 		var err error
@@ -96,17 +105,20 @@ func (h *UploadHandler) Handle(ctx context.Context, event UploadEvent) error {
 		return err
 	}); err != nil {
 		_ = h.repo.UpdateProcessingResult(ctx, a.ID, "", "")
-		return nil
+		h.log.ErrorContext(ctx, "thumbnail generation failed", observability.Attrs(ctx, "avatar_id", a.ID, "size", "300x300", "error", err.Error())...)
+		return fmt.Errorf("generate 300x300 thumbnail: %w", err)
 	}
 	key100 := "avatars/" + a.ID + "/thumb_100x100.jpg"
 	key300 := "avatars/" + a.ID + "/thumb_300x300.jpg"
 	if err := h.storage.Put(ctx, key100, thumb100, "image/jpeg"); err != nil {
 		_ = h.repo.UpdateProcessingResult(ctx, a.ID, "", "")
-		return nil
+		h.log.ErrorContext(ctx, "store thumbnail failed", observability.Attrs(ctx, "avatar_id", a.ID, "size", "100x100", "error", err.Error())...)
+		return fmt.Errorf("store 100x100 thumbnail: %w", err)
 	}
 	if err := h.storage.Put(ctx, key300, thumb300, "image/jpeg"); err != nil {
 		_ = h.repo.UpdateProcessingResult(ctx, a.ID, "", "")
-		return nil
+		h.log.ErrorContext(ctx, "store thumbnail failed", observability.Attrs(ctx, "avatar_id", a.ID, "size", "300x300", "error", err.Error())...)
+		return fmt.Errorf("store 300x300 thumbnail: %w", err)
 	}
 	if err := h.repo.UpdateProcessingResult(ctx, a.ID, key100, key300); err != nil {
 		return err
@@ -130,6 +142,9 @@ func NewDeleteHandler(repo service.Repository, storage service.Storage, log *slo
 	var cfg handlerConfig
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+	if log == nil {
+		log = slog.Default()
 	}
 	return &DeleteHandler{repo: repo, storage: storage, log: log, metrics: cfg.metrics}
 }

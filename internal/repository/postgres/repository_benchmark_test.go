@@ -85,14 +85,14 @@ func benchmarkRepository(b *testing.B, ctx context.Context) *Repository {
 		b.Fatal(err)
 	}
 	b.Cleanup(func() {
-		_, _ = repo.db.ExecContext(context.Background(), `DELETE FROM avatars WHERE id LIKE 'bench-%' OR user_id LIKE 'bench-%'`)
+		_, _ = repo.pool.Exec(context.Background(), `DELETE FROM avatars WHERE id LIKE 'bench-%' OR user_id LIKE 'bench-%'`)
 		_ = repo.Close()
 	})
 	return repo
 }
 
 func benchmarkEnsureSchema(ctx context.Context, repo *Repository) error {
-	_, err := repo.db.ExecContext(ctx, `
+	_, err := repo.pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS avatars (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,

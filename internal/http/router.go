@@ -47,13 +47,21 @@ func NewRouter(svc *service.AvatarService, health service.RuntimeHealthChecker, 
 	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		cfg.observability.Metrics.Handler().ServeHTTP(w, r)
 	})
-	r.Post("/api/v1/avatars", h.upload)
-	r.Get("/api/v1/avatars/{avatar_id}", h.readAvatar)
-	r.Get("/api/v1/avatars/{avatar_id}/metadata", h.metadata)
-	r.Delete("/api/v1/avatars/{avatar_id}", h.deleteAvatar)
-	r.Get("/api/v1/users/{user_id}/avatars", h.listUserAvatars)
-	r.Get("/api/v1/users/{user_id}/avatar", h.readUserAvatar)
-	r.Delete("/api/v1/users/{user_id}/avatar", h.deleteUserAvatar)
+	r.Route("/api", func(r chi.Router) {
+		r.Route("/v1", func(r chi.Router) {
+			r.Route("/avatars", func(r chi.Router) {
+				r.Post("/", h.upload)
+				r.Get("/{avatar_id}", h.readAvatar)
+				r.Get("/{avatar_id}/metadata", h.metadata)
+				r.Delete("/{avatar_id}", h.deleteAvatar)
+			})
+			r.Route("/users", func(r chi.Router) {
+				r.Get("/{user_id}/avatars", h.listUserAvatars)
+				r.Get("/{user_id}/avatar", h.readUserAvatar)
+				r.Delete("/{user_id}/avatar", h.deleteUserAvatar)
+			})
+		})
+	})
 	r.Get("/web/upload", h.webUpload)
 	r.Get("/web/gallery/{user_id}", h.webGallery)
 	return r

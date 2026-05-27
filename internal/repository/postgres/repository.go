@@ -3,11 +3,12 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -20,7 +21,7 @@ import (
 
 // Repository persists avatar metadata in PostgreSQL.
 type Repository struct {
-	db      *sql.DB
+	pool    *pgxpool.Pool
 	metrics *observability.Metrics
 }
 
@@ -36,16 +37,16 @@ func WithObservability(metrics *observability.Metrics) Option {
 
 // Open connects to PostgreSQL and returns a Repository.
 func Open(ctx context.Context, dsn string, opts ...Option) (*Repository, error) {
-	db, err := sql.Open("pgx", dsn)
+	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		return nil, err
 	}
-	r := &Repository{db: db}
+	r := &Repository{pool: pool}
 	for _, opt := range opts {
 		opt(r)
 	}
 	if err := r.HealthCheck(ctx); err != nil {
-		_ = db.Close()
+		pool.Close()
 		return nil, err
 	}
 	return r, nil
@@ -53,17 +54,17 @@ func Open(ctx context.Context, dsn string, opts ...Option) (*Repository, error) 
 
 // Close releases the underlying database connection pool.
 func (r *Repository) Close() error {
-	return r.db.Close()
+	r.pool.Close()
+	return nil
 }
 
 // HealthCheck verifies that PostgreSQL is reachable.
-func (r *Repository) HealthCheck(ctx context.Context) error {
+func (r *Repository) HealthCheck(ctx context.Context) (err error) {
 	ctx, span, done := r.start(ctx, "HealthCheck")
-	defer done(nil)
-	err := r.db.PingContext(ctx)
+	defer func() { done(err) }()
+	err = r.pool.Ping(ctx)
 	if err != nil {
 		recordPostgresError(span, err)
-		done(err)
 	}
 	return err
 }
@@ -72,7 +73,7 @@ func (r *Repository) HealthCheck(ctx context.Context) error {
 func (r *Repository) Create(ctx context.Context, a *domain.Avatar) error {
 	ctx, span, done := r.start(ctx, "Create")
 	defer done(nil)
-	_, err := r.db.ExecContext(ctx, `
+	_, err := r.pool.Exec(ctx, `
 		INSERT INTO avatars (
 			id, user_id, file_name, original_mime_type, size_bytes,
 			original_key, thumb100_key, thumb300_key,
@@ -126,7 +127,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*domain.Avatar, er
 func (r *Repository) ListActiveByUser(ctx context.Context, userID string) ([]domain.Avatar, error) {
 	ctx, span, done := r.start(ctx, "ListActiveByUser")
 	defer done(nil)
-	rows, err := r.db.QueryContext(ctx, `
+	rows, err := r.pool.Query(ctx, `
 		SELECT `+avatarColumns+`
 		FROM avatars
 		WHERE user_id = $1 AND deleted_at IS NULL
@@ -137,7 +138,7 @@ func (r *Repository) ListActiveByUser(ctx context.Context, userID string) ([]dom
 		done(err)
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer rows.Close()
 
 	var out []domain.Avatar
 	for rows.Next() {
@@ -161,7 +162,7 @@ func (r *Repository) ListActiveByUser(ctx context.Context, userID string) ([]dom
 func (r *Repository) SoftDeleteByID(ctx context.Context, id string, deletedAt time.Time) error {
 	ctx, span, done := r.start(ctx, "SoftDeleteByID")
 	defer done(nil)
-	res, err := r.db.ExecContext(ctx, `
+	res, err := r.pool.Exec(ctx, `
 		UPDATE avatars
 		SET deleted_at = $2, updated_at = $2
 		WHERE id = $1 AND deleted_at IS NULL
@@ -183,7 +184,7 @@ func (r *Repository) SoftDeleteByID(ctx context.Context, id string, deletedAt ti
 func (r *Repository) MarkPublishFailed(ctx context.Context, id string) error {
 	ctx, span, done := r.start(ctx, "MarkPublishFailed")
 	defer done(nil)
-	res, err := r.db.ExecContext(ctx, `
+	res, err := r.pool.Exec(ctx, `
 		UPDATE avatars
 		SET status = 'failed', updated_at = NOW()
 		WHERE id = $1
@@ -209,7 +210,7 @@ func (r *Repository) UpdateProcessingResult(ctx context.Context, id, thumb100, t
 	if thumb100 != "" && thumb300 != "" {
 		status = domain.StatusCompleted
 	}
-	res, err := r.db.ExecContext(ctx, `
+	res, err := r.pool.Exec(ctx, `
 		UPDATE avatars
 		SET thumb100_key = $2,
 			thumb300_key = $3,
@@ -240,9 +241,9 @@ const avatarColumns = `
 `
 
 func (r *Repository) scanOne(ctx context.Context, query string, args ...any) (*domain.Avatar, error) {
-	row := r.db.QueryRowContext(ctx, query, args...)
+	row := r.pool.QueryRow(ctx, query, args...)
 	a, err := scanAvatar(row)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, service.ErrNotFound
 	}
 	return a, err
@@ -265,11 +266,8 @@ func scanAvatar(s scanner) (*domain.Avatar, error) {
 	return &a, nil
 }
 
-func requireAffected(res sql.Result) error {
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
+func requireAffected(res pgconn.CommandTag) error {
+	rows := res.RowsAffected()
 	if rows == 0 {
 		return service.ErrNotFound
 	}

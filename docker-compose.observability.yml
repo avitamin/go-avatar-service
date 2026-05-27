@@ -50,6 +50,8 @@ services:
     image: prom/alertmanager
     command:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./configs/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     ports:

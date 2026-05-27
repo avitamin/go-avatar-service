@@ -29,7 +29,7 @@ func HTTPMiddleware(opts RouterOptions) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := propagation.TraceContext{}.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
 			r = r.WithContext(ctx)
-			route := "unknown"
+			route := r.URL.Path
 			if rc := chi.RouteContext(r.Context()); rc != nil {
 				if pattern := rc.RoutePattern(); pattern != "" {
 					route = pattern
@@ -45,16 +45,11 @@ func HTTPMiddleware(opts RouterOptions) func(http.Handler) http.Handler {
 			span.SetAttributes(attribute.String("http.route", route), attribute.String("http.method", r.Method))
 			r = r.WithContext(ctx)
 			start := time.Now()
-			sw := &StatusWriter{ResponseWriter: w, Status: http.StatusOK}
 			doneInflight := opts.Metrics.IncHTTPInflight(r.Method, route)
 			defer doneInflight()
+			sw := &StatusWriter{ResponseWriter: w, Status: http.StatusOK}
 			next.ServeHTTP(sw, r)
-			route = r.URL.Path
-			if rc := chi.RouteContext(r.Context()); rc != nil {
-				if pattern := rc.RoutePattern(); pattern != "" {
-					route = pattern
-				}
-			}
+			route = currentRoute(r)
 			span.SetName(r.Method + " " + route)
 			duration := time.Since(start)
 			opts.Metrics.ObserveHTTP(r.Method, route, sw.Status, duration)
@@ -73,14 +68,39 @@ func HTTPMiddleware(opts RouterOptions) func(http.Handler) http.Handler {
 	}
 }
 
+func currentRoute(r *http.Request) string {
+	if rc := chi.RouteContext(r.Context()); rc != nil {
+		if pattern := rc.RoutePattern(); pattern != "" {
+			return pattern
+		}
+	}
+	return r.URL.Path
+}
+
 // StatusWriter captures the response status code.
 type StatusWriter struct {
 	http.ResponseWriter
 	Status int
+	wrote  bool
 }
 
 // WriteHeader captures the response status code.
 func (w *StatusWriter) WriteHeader(code int) {
+	if w.wrote {
+		return
+	}
+	w.wrote = true
 	w.Status = code
 	w.ResponseWriter.WriteHeader(code)
+}
+
+// Write captures implicit 200 responses.
+func (w *StatusWriter) Write(data []byte) (int, error) {
+	if !w.wrote {
+		if w.Status == 0 {
+			w.Status = http.StatusOK
+		}
+		w.WriteHeader(w.Status)
+	}
+	return w.ResponseWriter.Write(data)
 }
