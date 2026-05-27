@@ -112,7 +112,12 @@ func RunServer(ctx context.Context) error {
 	}
 	defer brokerRuntime.close()
 	svc := service.NewAvatarService(storeRuntime.repo, storeRuntime.storage, brokerRuntime.broker, service.WithObservability(metrics))
-	server := newHTTPServer(addr, httpapi.NewRouter(svc, newServerHealthService(logger, storeRuntime, brokerRuntime), httpapi.WithObservability(observability.RouterOptions{Logger: logger, Metrics: metrics})))
+	server := newHTTPServer(addr, httpapi.NewRouter(
+		svc,
+		newServerHealthService(logger, storeRuntime, brokerRuntime),
+		httpapi.WithObservability(observability.RouterOptions{Logger: logger, Metrics: metrics}),
+		httpapi.WithRateLimiter(rateLimitConfigFromEnv()),
+	))
 	shutdownErrCh := make(chan error, 1)
 	go func() {
 		<-ctx.Done()
@@ -244,7 +249,7 @@ func newBrokerFromEnv(metricsOpt ...*observability.Metrics) (brokerRuntime, erro
 		return brokerRuntime{}, err
 	}
 	return brokerRuntime{
-		broker:   client,
+		broker:   service.NewGuardedBroker(client, newDependencyCircuitBreaker()),
 		close:    func() { _ = client.Close() },
 		rabbitmq: service.HealthyComponent(client.HealthCheck),
 	}, nil
@@ -282,12 +287,75 @@ func newStoreFromEnv(ctx context.Context, metricsOpt ...*observability.Metrics) 
 		return storeRuntime{}, err
 	}
 	return storeRuntime{
-		repo:     repo,
-		storage:  storage,
+		repo:     service.NewGuardedRepository(repo, newDependencyCircuitBreaker()),
+		storage:  service.NewGuardedStorage(storage, newDependencyCircuitBreaker()),
 		close:    func() { _ = repo.Close() },
 		postgres: service.HealthyComponent(repo.HealthCheck),
 		minio:    service.HealthyComponent(storage.HealthCheck),
 	}, nil
+}
+
+func rateLimitConfigFromEnv() httpapi.RateLimitConfig {
+	return httpapi.RateLimitConfig{
+		Enabled:        parseBoolEnvDefault("RATE_LIMIT_ENABLED", true),
+		RequestsPerSec: parseFloatEnvDefault("RATE_LIMIT_REQUESTS_PER_SECOND", 20),
+		Burst:          parseIntEnvDefault("RATE_LIMIT_BURST", 40),
+	}
+}
+
+func newDependencyCircuitBreaker() *service.CircuitBreaker {
+	return service.NewCircuitBreaker(service.CircuitBreakerConfig{
+		Enabled:          parseBoolEnvDefault("CIRCUIT_BREAKER_ENABLED", true),
+		FailureThreshold: parseIntEnvDefault("CIRCUIT_BREAKER_FAILURE_THRESHOLD", 5),
+		OpenTimeout:      time.Duration(parseIntEnvDefault("CIRCUIT_BREAKER_OPEN_TIMEOUT_SECONDS", 30)) * time.Second,
+		IsFailure:        isDependencyFailure,
+	})
+}
+
+func isDependencyFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	return !errors.Is(err, service.ErrNotFound) &&
+		!errors.Is(err, service.ErrForbidden) &&
+		!errors.Is(err, service.ErrVariantNotReady) &&
+		!errors.Is(err, service.ErrObjectNotFound)
+}
+
+func parseBoolEnvDefault(key string, fallback bool) bool {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+func parseFloatEnvDefault(key string, fallback float64) float64 {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+func parseIntEnvDefault(key string, fallback int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
 }
 
 func minioConfigFromEnv() (miniostore.Config, bool, error) {

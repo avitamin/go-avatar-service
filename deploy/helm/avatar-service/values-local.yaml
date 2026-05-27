@@ -1,0 +1,15 @@
+image:
+  repository: avatar-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+ingress:
+  enabled: true
+  className: nginx
+  host: avatar-service.local
+
+serviceMonitor:
+  enabled: false
+
+prometheusRule:
+  enabled: false

@@ -25,12 +25,20 @@ type RouterOption func(*routerConfig)
 
 type routerConfig struct {
 	observability observability.RouterOptions
+	rateLimit     RateLimitConfig
 }
 
 // WithObservability configures HTTP logs, metrics, and traces.
 func WithObservability(opts observability.RouterOptions) RouterOption {
 	return func(cfg *routerConfig) {
 		cfg.observability = opts
+	}
+}
+
+// WithRateLimiter configures request rate limiting for the HTTP router.
+func WithRateLimiter(rateLimit RateLimitConfig) RouterOption {
+	return func(cfg *routerConfig) {
+		cfg.rateLimit = rateLimit
 	}
 }
 
@@ -42,6 +50,9 @@ func NewRouter(svc *service.AvatarService, health service.RuntimeHealthChecker, 
 	}
 	r := chi.NewRouter()
 	r.Use(observability.HTTPMiddleware(cfg.observability))
+	if cfg.rateLimit.Enabled {
+		r.Use(NewRateLimiter(cfg.rateLimit).Middleware)
+	}
 	h := &handler{svc: svc, healthSvc: health, metrics: cfg.observability.Metrics}
 	r.Get("/health", h.health)
 	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
@@ -239,6 +250,8 @@ func (h *handler) writeMappedError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "not_found", "Not found", nil)
 	case errors.Is(err, service.ErrVariantNotReady):
 		writeError(w, http.StatusConflict, "variant_not_ready", "Variant is not ready", nil)
+	case errors.Is(err, service.ErrCircuitOpen):
+		writeError(w, http.StatusServiceUnavailable, "dependency_unavailable", "Dependency is temporarily unavailable", nil)
 	default:
 		writeError(w, http.StatusInternalServerError, "internal_error", "Internal error", nil)
 	}
