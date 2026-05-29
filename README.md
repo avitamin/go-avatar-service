@@ -56,6 +56,7 @@ Observability включен в runtime:
 Production readiness guardrails:
 
 - HTTP router включает per-client rate limiting по умолчанию. Настройки: `RATE_LIMIT_ENABLED`, `RATE_LIMIT_REQUESTS_PER_SECOND`, `RATE_LIMIT_BURST`.
+  Per-client buckets очищаются лениво по внутреннему TTL, без новых public env/Helm settings; подробный компромисс зафиксирован в [v1 spec](docs/specs/01-avatar-service-v1.md).
 - Runtime adapters защищены circuit breaker guard. Настройки: `CIRCUIT_BREAKER_ENABLED`, `CIRCUIT_BREAKER_FAILURE_THRESHOLD`, `CIRCUIT_BREAKER_OPEN_TIMEOUT_SECONDS`.
 - При открытом circuit breaker HTTP handlers возвращают единый JSON error shape с `503 dependency_unavailable`.
 

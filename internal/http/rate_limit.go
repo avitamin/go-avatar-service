@@ -10,10 +10,12 @@ import (
 
 // RateLimitConfig controls per-client request limiting.
 type RateLimitConfig struct {
-	Enabled        bool
-	RequestsPerSec float64
-	Burst          int
-	Now            func() time.Time
+	Enabled         bool
+	RequestsPerSec  float64
+	Burst           int
+	Now             func() time.Time
+	BucketTTL       time.Duration
+	CleanupInterval time.Duration
 }
 
 // RateLimiter is a small per-client token bucket limiter.
@@ -22,13 +24,18 @@ type RateLimiter struct {
 	burst float64
 	now   func() time.Time
 
+	bucketTTL       time.Duration
+	cleanupInterval time.Duration
+	lastCleanup     time.Time
+
 	mu      sync.Mutex
 	buckets map[string]*rateBucket
 }
 
 type rateBucket struct {
-	tokens float64
-	last   time.Time
+	tokens   float64
+	last     time.Time
+	lastSeen time.Time
 }
 
 // NewRateLimiter creates a per-client limiter. Invalid numeric values fall back to one request burst.
@@ -45,11 +52,22 @@ func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
 	if now == nil {
 		now = time.Now
 	}
+	bucketTTL := cfg.BucketTTL
+	if bucketTTL <= 0 {
+		bucketTTL = 5 * time.Minute
+	}
+	cleanupInterval := cfg.CleanupInterval
+	if cleanupInterval <= 0 {
+		cleanupInterval = time.Minute
+	}
 	return &RateLimiter{
-		rate:    rate,
-		burst:   float64(burst),
-		now:     now,
-		buckets: make(map[string]*rateBucket),
+		rate:            rate,
+		burst:           float64(burst),
+		now:             now,
+		bucketTTL:       bucketTTL,
+		cleanupInterval: cleanupInterval,
+		lastCleanup:     now(),
+		buckets:         make(map[string]*rateBucket),
 	}
 }
 
@@ -69,9 +87,13 @@ func (l *RateLimiter) allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if now.Sub(l.lastCleanup) >= l.cleanupInterval {
+		l.cleanup(now)
+	}
+
 	bucket, ok := l.buckets[key]
 	if !ok {
-		l.buckets[key] = &rateBucket{tokens: l.burst - 1, last: now}
+		l.buckets[key] = &rateBucket{tokens: l.burst - 1, last: now, lastSeen: now}
 		return true
 	}
 
@@ -83,11 +105,21 @@ func (l *RateLimiter) allow(key string) bool {
 		}
 		bucket.last = now
 	}
+	bucket.lastSeen = now
 	if bucket.tokens < 1 {
 		return false
 	}
 	bucket.tokens--
 	return true
+}
+
+func (l *RateLimiter) cleanup(now time.Time) {
+	for key, bucket := range l.buckets {
+		if now.Sub(bucket.lastSeen) >= l.bucketTTL {
+			delete(l.buckets, key)
+		}
+	}
+	l.lastCleanup = now
 }
 
 func clientKey(r *http.Request) string {

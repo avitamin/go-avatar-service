@@ -61,3 +61,91 @@ func TestRateLimiterCanBeDisabled(t *testing.T) {
 		}
 	}
 }
+
+func TestRateLimiterRemovesStaleBucketsAfterTTL(t *testing.T) {
+	now := time.Unix(100, 0)
+	limiter := NewRateLimiter(RateLimitConfig{
+		RequestsPerSec:  1,
+		Burst:           1,
+		Now:             func() time.Time { return now },
+		BucketTTL:       time.Minute,
+		CleanupInterval: time.Second,
+	})
+
+	if !limiter.allow("stale-client") {
+		t.Fatal("first request was denied")
+	}
+	if len(limiter.buckets) != 1 {
+		t.Fatalf("buckets after first request = %d, want 1", len(limiter.buckets))
+	}
+
+	now = now.Add(time.Minute)
+	if !limiter.allow("fresh-client") {
+		t.Fatal("request from fresh client was denied")
+	}
+
+	if _, ok := limiter.buckets["stale-client"]; ok {
+		t.Fatal("stale bucket was not removed")
+	}
+	if _, ok := limiter.buckets["fresh-client"]; !ok {
+		t.Fatal("fresh bucket was not created")
+	}
+}
+
+func TestRateLimiterKeepsRecentlyActiveBucketDuringCleanup(t *testing.T) {
+	now := time.Unix(200, 0)
+	limiter := NewRateLimiter(RateLimitConfig{
+		RequestsPerSec:  1,
+		Burst:           1,
+		Now:             func() time.Time { return now },
+		BucketTTL:       time.Minute,
+		CleanupInterval: 30 * time.Second,
+	})
+
+	if !limiter.allow("stale-client") {
+		t.Fatal("first stale-client request was denied")
+	}
+
+	now = now.Add(45 * time.Second)
+	if !limiter.allow("active-client") {
+		t.Fatal("first active-client request was denied")
+	}
+
+	now = now.Add(30 * time.Second)
+	if !limiter.allow("trigger-client") {
+		t.Fatal("trigger-client request was denied")
+	}
+
+	if _, ok := limiter.buckets["stale-client"]; ok {
+		t.Fatal("stale bucket was not removed")
+	}
+	if _, ok := limiter.buckets["active-client"]; !ok {
+		t.Fatal("recently active bucket was removed")
+	}
+}
+
+func TestRateLimiterCleanupDoesNotResetActiveExhaustedBucketBeforeTTL(t *testing.T) {
+	now := time.Unix(300, 0)
+	limiter := NewRateLimiter(RateLimitConfig{
+		RequestsPerSec:  0.000001,
+		Burst:           1,
+		Now:             func() time.Time { return now },
+		BucketTTL:       time.Minute,
+		CleanupInterval: 10 * time.Second,
+	})
+
+	if !limiter.allow("active-client") {
+		t.Fatal("first active-client request was denied")
+	}
+	if limiter.allow("active-client") {
+		t.Fatal("second active-client request was allowed")
+	}
+
+	now = now.Add(10 * time.Second)
+	if !limiter.allow("trigger-client") {
+		t.Fatal("trigger-client request was denied")
+	}
+	if limiter.allow("active-client") {
+		t.Fatal("active-client bucket was reset before TTL")
+	}
+}
