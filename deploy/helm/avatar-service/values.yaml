@@ -125,6 +125,7 @@ postgresql:
   database: avatars
   username: avatars
   password: avatars
+  sslmode: require
   storageSize: 1Gi
 
 rabbitmq:

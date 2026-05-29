@@ -13,3 +13,6 @@ serviceMonitor:
 
 prometheusRule:
   enabled: false
+
+postgresql:
+  sslmode: disable

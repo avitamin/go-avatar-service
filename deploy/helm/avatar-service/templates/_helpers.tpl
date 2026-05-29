@@ -35,7 +35,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if .Values.secret.postgresDsn -}}
 {{- .Values.secret.postgresDsn -}}
 {{- else -}}
-postgres://{{ .Values.postgresql.username }}:{{ .Values.postgresql.password }}@{{ include "avatar-service.fullname" . }}-postgresql:5432/{{ .Values.postgresql.database }}?sslmode=disable
+postgres://{{ .Values.postgresql.username }}:{{ .Values.postgresql.password }}@{{ include "avatar-service.fullname" . }}-postgresql:5432/{{ .Values.postgresql.database }}?sslmode={{ .Values.postgresql.sslmode }}
 {{- end -}}
 {{- end -}}
 
