@@ -30,6 +30,7 @@ flowchart LR
 - Миграции выполняются отдельным Helm hook Job командой `avatars-service migrate up`.
 - Конфигурация разделена на ConfigMap и Secret. Секреты используют фактические env names приложения: `POSTGRES_DSN`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `RABBITMQ_URL`.
 - Rate limiting и circuit breaker включены через env и могут быть настроены values-файлом.
+- `config.rateLimitTrustForwardedHeaders` по умолчанию равен `"false"`: limiter bucket-ит по `RemoteAddr` и игнорирует `X-Forwarded-For`. Включайте его только если `server` недоступен напрямую, а trusted ingress/proxy перезаписывает forwarded headers перед передачей запроса в сервис.
 
 ## Local install
 

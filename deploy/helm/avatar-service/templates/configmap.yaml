@@ -15,6 +15,7 @@ data:
   RATE_LIMIT_ENABLED: {{ .Values.config.rateLimitEnabled | quote }}
   RATE_LIMIT_REQUESTS_PER_SECOND: {{ .Values.config.rateLimitRequestsPerSecond | quote }}
   RATE_LIMIT_BURST: {{ .Values.config.rateLimitBurst | quote }}
+  RATE_LIMIT_TRUST_FORWARDED_HEADERS: {{ .Values.config.rateLimitTrustForwardedHeaders | quote }}
   CIRCUIT_BREAKER_ENABLED: {{ .Values.config.circuitBreakerEnabled | quote }}
   CIRCUIT_BREAKER_FAILURE_THRESHOLD: {{ .Values.config.circuitBreakerFailureThreshold | quote }}
   CIRCUIT_BREAKER_OPEN_TIMEOUT_SECONDS: {{ .Values.config.circuitBreakerOpenTimeoutSeconds | quote }}

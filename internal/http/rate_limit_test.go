@@ -62,6 +62,98 @@ func TestRateLimiterCanBeDisabled(t *testing.T) {
 	}
 }
 
+func TestRateLimiterIgnoresSpoofedForwardedForByDefault(t *testing.T) {
+	router := newRateLimitedHealthRouter(RateLimitConfig{
+		Enabled:        true,
+		RequestsPerSec: 1,
+		Burst:          1,
+		Now:            func() time.Time { return time.Unix(0, 0) },
+	})
+
+	first := httptest.NewRequest(http.MethodGet, "/health", nil)
+	first.RemoteAddr = "192.0.2.10:12345"
+	first.Header.Set("X-Forwarded-For", "198.51.100.1")
+	firstResp := httptest.NewRecorder()
+	router.ServeHTTP(firstResp, first)
+	if firstResp.Code != http.StatusOK {
+		t.Fatalf("first status = %d, want %d", firstResp.Code, http.StatusOK)
+	}
+
+	second := httptest.NewRequest(http.MethodGet, "/health", nil)
+	second.RemoteAddr = "192.0.2.10:12345"
+	second.Header.Set("X-Forwarded-For", "198.51.100.2")
+	secondResp := httptest.NewRecorder()
+	router.ServeHTTP(secondResp, second)
+	if secondResp.Code != http.StatusTooManyRequests {
+		t.Fatalf("second status = %d, want %d", secondResp.Code, http.StatusTooManyRequests)
+	}
+}
+
+func TestRateLimiterUsesForwardedForWhenTrusted(t *testing.T) {
+	router := newRateLimitedHealthRouter(RateLimitConfig{
+		Enabled:               true,
+		RequestsPerSec:        1,
+		Burst:                 1,
+		TrustForwardedHeaders: true,
+		Now:                   func() time.Time { return time.Unix(0, 0) },
+	})
+
+	first := httptest.NewRequest(http.MethodGet, "/health", nil)
+	first.RemoteAddr = "192.0.2.10:12345"
+	first.Header.Set("X-Forwarded-For", "198.51.100.1")
+	firstResp := httptest.NewRecorder()
+	router.ServeHTTP(firstResp, first)
+	if firstResp.Code != http.StatusOK {
+		t.Fatalf("first status = %d, want %d", firstResp.Code, http.StatusOK)
+	}
+
+	second := httptest.NewRequest(http.MethodGet, "/health", nil)
+	second.RemoteAddr = "192.0.2.10:12345"
+	second.Header.Set("X-Forwarded-For", "198.51.100.2")
+	secondResp := httptest.NewRecorder()
+	router.ServeHTTP(secondResp, second)
+	if secondResp.Code != http.StatusOK {
+		t.Fatalf("second status = %d, want %d", secondResp.Code, http.StatusOK)
+	}
+}
+
+func TestRateLimiterFallsBackToRemoteAddrForEmptyTrustedForwardedFor(t *testing.T) {
+	router := newRateLimitedHealthRouter(RateLimitConfig{
+		Enabled:               true,
+		RequestsPerSec:        1,
+		Burst:                 1,
+		TrustForwardedHeaders: true,
+		Now:                   func() time.Time { return time.Unix(0, 0) },
+	})
+
+	first := httptest.NewRequest(http.MethodGet, "/health", nil)
+	first.RemoteAddr = "192.0.2.10:12345"
+	first.Header.Set("X-Forwarded-For", " , 198.51.100.1")
+	firstResp := httptest.NewRecorder()
+	router.ServeHTTP(firstResp, first)
+	if firstResp.Code != http.StatusOK {
+		t.Fatalf("first status = %d, want %d", firstResp.Code, http.StatusOK)
+	}
+
+	second := httptest.NewRequest(http.MethodGet, "/health", nil)
+	second.RemoteAddr = "192.0.2.10:12345"
+	second.Header.Set("X-Forwarded-For", "198.51.100.2")
+	secondResp := httptest.NewRecorder()
+	router.ServeHTTP(secondResp, second)
+	if secondResp.Code != http.StatusOK {
+		t.Fatalf("second status = %d, want %d", secondResp.Code, http.StatusOK)
+	}
+
+	third := httptest.NewRequest(http.MethodGet, "/health", nil)
+	third.RemoteAddr = "192.0.2.10:12345"
+	third.Header.Set("X-Forwarded-For", "   ")
+	thirdResp := httptest.NewRecorder()
+	router.ServeHTTP(thirdResp, third)
+	if thirdResp.Code != http.StatusTooManyRequests {
+		t.Fatalf("third status = %d, want %d", thirdResp.Code, http.StatusTooManyRequests)
+	}
+}
+
 func TestRateLimiterRemovesStaleBucketsAfterTTL(t *testing.T) {
 	now := time.Unix(100, 0)
 	limiter := NewRateLimiter(RateLimitConfig{
@@ -148,4 +240,13 @@ func TestRateLimiterCleanupDoesNotResetActiveExhaustedBucketBeforeTTL(t *testing
 	if limiter.allow("active-client") {
 		t.Fatal("active-client bucket was reset before TTL")
 	}
+}
+
+func newRateLimitedHealthRouter(cfg RateLimitConfig) http.Handler {
+	svc := service.NewAvatarService(service.NewMemoryRepository(), service.NewMemoryStorage(), noopBroker{})
+	return NewRouter(
+		svc,
+		staticHealthService{snapshot: service.HealthSnapshot{Status: service.HealthStatusOK}},
+		WithRateLimiter(cfg),
+	)
 }

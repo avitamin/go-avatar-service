@@ -297,9 +297,10 @@ func newStoreFromEnv(ctx context.Context, metricsOpt ...*observability.Metrics) 
 
 func rateLimitConfigFromEnv() httpapi.RateLimitConfig {
 	return httpapi.RateLimitConfig{
-		Enabled:        parseBoolEnvDefault("RATE_LIMIT_ENABLED", true),
-		RequestsPerSec: parseFloatEnvDefault("RATE_LIMIT_REQUESTS_PER_SECOND", 20),
-		Burst:          parseIntEnvDefault("RATE_LIMIT_BURST", 40),
+		Enabled:               parseBoolEnvDefault("RATE_LIMIT_ENABLED", true),
+		RequestsPerSec:        parseFloatEnvDefault("RATE_LIMIT_REQUESTS_PER_SECOND", 20),
+		Burst:                 parseIntEnvDefault("RATE_LIMIT_BURST", 40),
+		TrustForwardedHeaders: parseBoolEnvDefault("RATE_LIMIT_TRUST_FORWARDED_HEADERS", false),
 	}
 }
 

@@ -10,12 +10,13 @@ import (
 
 // RateLimitConfig controls per-client request limiting.
 type RateLimitConfig struct {
-	Enabled         bool
-	RequestsPerSec  float64
-	Burst           int
-	Now             func() time.Time
-	BucketTTL       time.Duration
-	CleanupInterval time.Duration
+	Enabled               bool
+	RequestsPerSec        float64
+	Burst                 int
+	TrustForwardedHeaders bool
+	Now                   func() time.Time
+	BucketTTL             time.Duration
+	CleanupInterval       time.Duration
 }
 
 // RateLimiter is a small per-client token bucket limiter.
@@ -24,9 +25,10 @@ type RateLimiter struct {
 	burst float64
 	now   func() time.Time
 
-	bucketTTL       time.Duration
-	cleanupInterval time.Duration
-	lastCleanup     time.Time
+	trustForwardedHeaders bool
+	bucketTTL             time.Duration
+	cleanupInterval       time.Duration
+	lastCleanup           time.Time
 
 	mu      sync.Mutex
 	buckets map[string]*rateBucket
@@ -61,20 +63,21 @@ func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
 		cleanupInterval = time.Minute
 	}
 	return &RateLimiter{
-		rate:            rate,
-		burst:           float64(burst),
-		now:             now,
-		bucketTTL:       bucketTTL,
-		cleanupInterval: cleanupInterval,
-		lastCleanup:     now(),
-		buckets:         make(map[string]*rateBucket),
+		rate:                  rate,
+		burst:                 float64(burst),
+		now:                   now,
+		trustForwardedHeaders: cfg.TrustForwardedHeaders,
+		bucketTTL:             bucketTTL,
+		cleanupInterval:       cleanupInterval,
+		lastCleanup:           now(),
+		buckets:               make(map[string]*rateBucket),
 	}
 }
 
 // Middleware rejects requests that exceed the configured per-client bucket.
 func (l *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if l != nil && !l.allow(clientKey(r)) {
+		if l != nil && !l.allow(clientKey(r, l.trustForwardedHeaders)) {
 			writeError(w, http.StatusTooManyRequests, "rate_limited", "Too many requests", nil)
 			return
 		}
@@ -122,9 +125,14 @@ func (l *RateLimiter) cleanup(now time.Time) {
 	l.lastCleanup = now
 }
 
-func clientKey(r *http.Request) string {
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		return strings.TrimSpace(strings.Split(forwarded, ",")[0])
+func clientKey(r *http.Request, trustForwardedHeaders bool) string {
+	if trustForwardedHeaders {
+		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+			first := strings.TrimSpace(strings.Split(forwarded, ",")[0])
+			if first != "" {
+				return first
+			}
+		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err == nil && host != "" {

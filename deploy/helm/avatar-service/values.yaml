@@ -52,6 +52,7 @@ config:
   rateLimitEnabled: "true"
   rateLimitRequestsPerSecond: "20"
   rateLimitBurst: "40"
+  rateLimitTrustForwardedHeaders: "false"
   circuitBreakerEnabled: "true"
   circuitBreakerFailureThreshold: "5"
   circuitBreakerOpenTimeoutSeconds: "30"

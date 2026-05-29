@@ -48,6 +48,15 @@ func TestCLIDoesNotRunMigrationsOnServerOrWorker(t *testing.T) {
 	}
 }
 
+func TestRateLimitConfigFromEnvMapsTrustForwardedHeaders(t *testing.T) {
+	t.Setenv("RATE_LIMIT_TRUST_FORWARDED_HEADERS", "true")
+
+	cfg := rateLimitConfigFromEnv()
+	if !cfg.TrustForwardedHeaders {
+		t.Fatal("TrustForwardedHeaders = false, want true")
+	}
+}
+
 func TestRunServerUsesSignalContext(t *testing.T) {
 	origSignalContext := signalContextFn
 	origRunServer := runServerFn
