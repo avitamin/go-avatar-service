@@ -6,10 +6,13 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"go-avatar-service/internal/observability"
 )
 
 func TestCLIContract(t *testing.T) {
@@ -307,6 +310,39 @@ func TestCheckCommandsIgnoreInvalidRuntimeEnv(t *testing.T) {
 		if err := Run(args, io.Discard); err != nil {
 			t.Fatalf("Run(%v) error = %v", args, err)
 		}
+	}
+}
+
+func TestWorkerMonitoringHandlerExposesProcessHealth(t *testing.T) {
+	handler := workerMonitoringHandler(observability.NewMetrics(nil))
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/health status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Fatalf("/health Content-Type = %q, want text/plain; charset=utf-8", got)
+	}
+	if got := rec.Body.String(); got != "ok\n" {
+		t.Fatalf("/health body = %q, want ok\\n", got)
+	}
+}
+
+func TestWorkerMonitoringHandlerStillExposesMetrics(t *testing.T) {
+	metrics := observability.NewMetrics(nil)
+	metrics.ObserveWorkerMessage("avatar.uploaded", "success", time.Millisecond)
+	handler := workerMonitoringHandler(metrics)
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/metrics status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Body.String(); !strings.Contains(got, "avatar_worker_messages_total") {
+		t.Fatalf("/metrics missing worker metrics:\n%s", got)
 	}
 }
 

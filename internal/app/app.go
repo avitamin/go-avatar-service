@@ -473,9 +473,7 @@ func maybeStartMetricsServer(ctx context.Context, addr string, metrics *observab
 	if addr == "" {
 		return nil, func() {}
 	}
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", metrics.Handler())
-	server := &http.Server{Addr: addr, Handler: mux}
+	server := &http.Server{Addr: addr, Handler: workerMonitoringHandler(metrics)}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
@@ -492,4 +490,14 @@ func maybeStartMetricsServer(ctx context.Context, addr string, metrics *observab
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
 	}
+}
+
+func workerMonitoringHandler(metrics *observability.Metrics) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	mux.Handle("GET /metrics", metrics.Handler())
+	return mux
 }

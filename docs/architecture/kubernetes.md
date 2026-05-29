@@ -26,7 +26,7 @@ flowchart LR
 ## Runtime contract
 
 - `server` запускается командой `avatars-service server`, слушает `HTTP_ADDR=:8080`, отдает `/health`, `/metrics`, API и web endpoints.
-- `worker` запускается командой `avatars-service worker`, поднимает metrics endpoint на `METRICS_ADDR=:9091`.
+- `worker` запускается командой `avatars-service worker`, поднимает lightweight `/health` и Prometheus `/metrics` на `METRICS_ADDR=:9091`. Kubernetes probes используют `/health`; Prometheus scrape через ServiceMonitor остается на `/metrics`.
 - Миграции выполняются отдельным Helm hook Job командой `avatars-service migrate up`.
 - Конфигурация разделена на ConfigMap и Secret. Секреты используют фактические env names приложения: `POSTGRES_DSN`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `RABBITMQ_URL`.
 - Rate limiting и circuit breaker включены через env и могут быть настроены values-файлом.
@@ -82,7 +82,7 @@ helm upgrade --install avatar-service ./deploy/helm/avatar-service \
   --set prometheusRule.enabled=true
 ```
 
-Server scrape идет через service port `http`, worker scrape через service port `metrics`.
+Server scrape идет через service port `http` и path `/metrics`, worker scrape через service port `metrics` и path `/metrics`. Worker liveness/readiness probes ходят в process-level `/health` на том же metrics port.
 Alert rules покрывают HTTP 5xx, upload errors, p95 latency, dependency errors, worker failures и отсутствие доступных Kubernetes replicas.
 
 Chart также создает ConfigMap `avatar-service-grafana-dashboard` с label `grafana_dashboard=1`.
