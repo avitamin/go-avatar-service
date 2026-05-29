@@ -124,15 +124,15 @@ postgresql:
   image: postgres:16
   database: avatars
   username: avatars
-  password: avatars
+  password: ""
   sslmode: require
   storageSize: 1Gi
 
 rabbitmq:
   enabled: true
   image: rabbitmq:3-management
-  username: guest
-  password: guest
+  username: ""
+  password: ""
 
 minio:
   enabled: true

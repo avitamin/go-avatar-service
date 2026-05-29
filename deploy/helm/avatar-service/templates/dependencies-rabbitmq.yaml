@@ -53,9 +53,9 @@ spec:
               containerPort: 15692
           env:
             - name: RABBITMQ_DEFAULT_USER
-              value: {{ .Values.rabbitmq.username | quote }}
+              value: {{ required "rabbitmq.username is required when rabbitmq.enabled=true" .Values.rabbitmq.username | quote }}
             - name: RABBITMQ_DEFAULT_PASS
-              value: {{ .Values.rabbitmq.password | quote }}
+              value: {{ required "rabbitmq.password is required when rabbitmq.enabled=true" .Values.rabbitmq.password | quote }}
           resources:
             requests:
               cpu: 100m

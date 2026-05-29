@@ -15,4 +15,9 @@ prometheusRule:
   enabled: false
 
 postgresql:
+  password: avatars
   sslmode: disable
+
+rabbitmq:
+  username: guest
+  password: guest

@@ -96,10 +96,11 @@ Chart также создает ConfigMap `avatar-service-grafana-dashboard` с 
 - ServiceAccount не получает Kubernetes API permissions; Role пустой.
 - NetworkPolicy ограничивает входящий трафик к `server` и `worker`, а egress оставляет DNS и доступ к локальным dependency pods.
 - Secret хранит DSN и credentials; ConfigMap хранит только не чувствительную конфигурацию.
+- Default chart не задает PostgreSQL/RabbitMQ пароли. Для production-like установки задайте `secret.postgresDsn` и `secret.rabbitmqUrl` либо явные `postgresql.password`, `rabbitmq.username` и `rabbitmq.password`; локальный `values-local.yaml` содержит только demo credentials.
 
 ## Production notes
 
-Bundled PostgreSQL, RabbitMQ и MinIO предназначены для локальной/demo установки. Generated `POSTGRES_DSN` использует `postgresql.sslmode`, который по умолчанию равен `require`; локальный профиль `values-local.yaml` явно переключает его на `disable` для bundled PostgreSQL без TLS. Для production-like окружения оставьте `postgresql.sslmode=require` либо задайте полный `secret.postgresDsn` для managed PostgreSQL вместе с `secret.rabbitmqUrl`, MinIO endpoint и credentials, или замените dependency templates на отдельные platform-owned charts.
+Bundled PostgreSQL, RabbitMQ и MinIO предназначены для локальной/demo установки. Generated `POSTGRES_DSN` использует `postgresql.sslmode`, который по умолчанию равен `require`; локальный профиль `values-local.yaml` явно переключает его на `disable` для bundled PostgreSQL без TLS и задает demo PostgreSQL/RabbitMQ credentials. Для production-like окружения не используйте demo credentials из `values-local.yaml`: оставьте `postgresql.sslmode=require` и задайте полный `secret.postgresDsn` для managed PostgreSQL вместе с `secret.rabbitmqUrl`, MinIO endpoint и credentials, или задайте сильные explicit credentials и замените dependency templates на отдельные platform-owned charts.
 
 ## Acceptance checklist
 
