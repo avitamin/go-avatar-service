@@ -103,12 +103,12 @@ func (s *GuardedStorage) Delete(ctx context.Context, key string) error {
 	})
 }
 
-func (s *GuardedStorage) Exists(ctx context.Context, key string) (exists bool) {
-	err := s.breaker.Execute(ctx, func(ctx context.Context) error {
-		exists = s.next.Exists(ctx, key)
-		return nil
+func (s *GuardedStorage) Exists(ctx context.Context, key string) (exists bool, err error) {
+	err = s.breaker.Execute(ctx, func(ctx context.Context) error {
+		exists, err = s.next.Exists(ctx, key)
+		return err
 	})
-	return err == nil && exists
+	return exists, err
 }
 
 // GuardedBroker applies a circuit breaker around broker publication.

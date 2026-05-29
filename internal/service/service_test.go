@@ -144,12 +144,62 @@ func TestUserFallbackAndDeleteRules(t *testing.T) {
 	}
 }
 
+func TestExistsStorageErrorsPropagate(t *testing.T) {
+	ctx := context.Background()
+	storageErr := errors.New("storage unavailable")
+
+	t.Run("metadata", func(t *testing.T) {
+		baseStorage := NewMemoryStorage()
+		svc := NewAvatarService(NewMemoryRepository(), baseStorage, &stubBroker{})
+		created, _ := svc.Upload(ctx, UploadInput{UserID: "user-1", FileName: "a.jpg", Content: []byte{0xff, 0xd8, 0xff}, ContentType: "image/jpeg"})
+		svc.storage = &failingExistsStorage{Storage: baseStorage, err: storageErr}
+
+		_, err := svc.Metadata(ctx, created.ID)
+		if !errors.Is(err, storageErr) {
+			t.Fatalf("Metadata() err = %v, want %v", err, storageErr)
+		}
+	})
+
+	t.Run("gallery", func(t *testing.T) {
+		baseStorage := NewMemoryStorage()
+		svc := NewAvatarService(NewMemoryRepository(), baseStorage, &stubBroker{})
+		_, _ = svc.Upload(ctx, UploadInput{UserID: "user-1", FileName: "a.jpg", Content: []byte{0xff, 0xd8, 0xff}, ContentType: "image/jpeg"})
+		svc.storage = &failingExistsStorage{Storage: baseStorage, err: storageErr}
+
+		_, _, err := svc.GalleryByUser(ctx, "user-1")
+		if !errors.Is(err, storageErr) {
+			t.Fatalf("GalleryByUser() err = %v, want %v", err, storageErr)
+		}
+	})
+
+	t.Run("delete current", func(t *testing.T) {
+		baseStorage := NewMemoryStorage()
+		svc := NewAvatarService(NewMemoryRepository(), baseStorage, &stubBroker{})
+		_, _ = svc.Upload(ctx, UploadInput{UserID: "user-1", FileName: "a.jpg", Content: []byte{0xff, 0xd8, 0xff}, ContentType: "image/jpeg"})
+		svc.storage = &failingExistsStorage{Storage: baseStorage, err: storageErr}
+
+		err := svc.DeleteCurrentUserAvatar(ctx, "user-1", "user-1")
+		if !errors.Is(err, storageErr) {
+			t.Fatalf("DeleteCurrentUserAvatar() err = %v, want %v", err, storageErr)
+		}
+	})
+}
+
 type stubBroker struct {
 	err error
 }
 
 func (b *stubBroker) Publish(context.Context, string, []byte, string) error {
 	return b.err
+}
+
+type failingExistsStorage struct {
+	Storage
+	err error
+}
+
+func (s *failingExistsStorage) Exists(context.Context, string) (bool, error) {
+	return false, s.err
 }
 
 func gatherMetrics(t *testing.T, metrics *observability.Metrics) []byte {

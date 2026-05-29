@@ -72,7 +72,7 @@ type Storage interface {
 	Put(context.Context, string, []byte, string) error
 	Get(context.Context, string) ([]byte, string, error)
 	Delete(context.Context, string) error
-	Exists(context.Context, string) bool
+	Exists(context.Context, string) (bool, error)
 }
 
 // AvatarService coordinates avatar uploads, reads, and deletes.
@@ -220,14 +220,33 @@ func (s *AvatarService) Metadata(ctx context.Context, id string) (AvatarDTO, err
 		return AvatarDTO{}, err
 	}
 	out := dto(*a)
-	if !s.storage.Exists(ctx, a.OriginalKey) {
+	exists, err := s.storage.Exists(ctx, a.OriginalKey)
+	if err != nil {
+		recordSpanError(span, err)
+		return AvatarDTO{}, err
+	}
+	if !exists {
 		out.Status = domain.StatusFailed
 	}
-	if a.Thumb100Available && s.storage.Exists(ctx, a.Thumb100Key) {
-		out.Thumbnails = append(out.Thumbnails, string(domain.Size100))
+	if a.Thumb100Available {
+		exists, err = s.storage.Exists(ctx, a.Thumb100Key)
+		if err != nil {
+			recordSpanError(span, err)
+			return AvatarDTO{}, err
+		}
+		if exists {
+			out.Thumbnails = append(out.Thumbnails, string(domain.Size100))
+		}
 	}
-	if a.Thumb300Available && s.storage.Exists(ctx, a.Thumb300Key) {
-		out.Thumbnails = append(out.Thumbnails, string(domain.Size300))
+	if a.Thumb300Available {
+		exists, err = s.storage.Exists(ctx, a.Thumb300Key)
+		if err != nil {
+			recordSpanError(span, err)
+			return AvatarDTO{}, err
+		}
+		if exists {
+			out.Thumbnails = append(out.Thumbnails, string(domain.Size300))
+		}
 	}
 	return out, nil
 }
@@ -343,7 +362,15 @@ func (s *AvatarService) DeleteCurrentUserAvatar(ctx context.Context, pathUserID,
 		return err
 	}
 	for _, a := range items {
-		if a.OriginalAvailable && s.storage.Exists(ctx, a.OriginalKey) {
+		if !a.OriginalAvailable {
+			continue
+		}
+		exists, err := s.storage.Exists(ctx, a.OriginalKey)
+		if err != nil {
+			recordSpanError(span, err)
+			return err
+		}
+		if exists {
 			return s.DeleteByID(ctx, a.ID, owner)
 		}
 	}
@@ -363,7 +390,15 @@ func (s *AvatarService) GalleryByUser(ctx context.Context, userID string) ([]Ava
 	}
 	out := make([]AvatarDTO, 0, len(items))
 	for _, a := range items {
-		if a.OriginalAvailable && s.storage.Exists(ctx, a.OriginalKey) {
+		if !a.OriginalAvailable {
+			continue
+		}
+		exists, err := s.storage.Exists(ctx, a.OriginalKey)
+		if err != nil {
+			recordSpanError(span, err)
+			return nil, false, err
+		}
+		if exists {
 			out = append(out, dto(a))
 		}
 	}
@@ -558,9 +593,9 @@ func (s *MemoryStorage) Delete(_ context.Context, key string) error {
 }
 
 // Exists reports whether the key is currently present in memory.
-func (s *MemoryStorage) Exists(_ context.Context, key string) bool {
+func (s *MemoryStorage) Exists(_ context.Context, key string) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	_, ok := s.objects[key]
-	return ok
+	return ok, nil
 }
