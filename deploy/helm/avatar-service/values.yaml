@@ -1,0 +1,142 @@
+replicaCount:
+  server: 2
+  worker: 1
+
+image:
+  repository: avatar-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+server:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+worker:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+config:
+  httpAddr: ":8080"
+  minioBucket: avatars
+  minioUseSSL: "false"
+  serviceVersion: "0.1.0"
+  otelTracesEnabled: "true"
+  otelLogsEnabled: "false"
+  rateLimitEnabled: "true"
+  rateLimitRequestsPerSecond: "20"
+  rateLimitBurst: "40"
+  rateLimitTrustForwardedHeaders: "false"
+  circuitBreakerEnabled: "true"
+  circuitBreakerFailureThreshold: "5"
+  circuitBreakerOpenTimeoutSeconds: "30"
+
+secret:
+  postgresDsn: ""
+  minioAccessKey: minioadmin
+  minioSecretKey: minioadmin
+  rabbitmqUrl: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  host: avatar-service.local
+  annotations: {}
+  tls: []
+
+hpa:
+  server:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    cpuAverageUtilization: 70
+    memoryAverageUtilization: 80
+  worker:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    cpuAverageUtilization: 70
+    memoryAverageUtilization: 80
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  labels: {}
+
+prometheusRule:
+  enabled: true
+  labels: {}
+
+grafanaDashboard:
+  enabled: true
+  labels:
+    grafana_dashboard: "1"
+
+networkPolicy:
+  enabled: true
+  ingressNamespaceLabel:
+    kubernetes.io/metadata.name: ingress-nginx
+  monitoringNamespaceLabel:
+    kubernetes.io/metadata.name: monitoring
+
+migrations:
+  hook: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+postgresql:
+  enabled: true
+  image: postgres:16
+  database: avatars
+  username: avatars
+  password: ""
+  sslmode: require
+  storageSize: 1Gi
+
+rabbitmq:
+  enabled: true
+  image: rabbitmq:3-management
+  username: ""
+  password: ""
+
+minio:
+  enabled: true
+  image: minio/minio:latest
+  storageSize: 1Gi
+  rootUser: minioadmin
+  rootPassword: minioadmin

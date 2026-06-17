@@ -10,6 +10,7 @@ import (
 )
 
 func TestServerHealthServiceReportsFallbackDependenciesAsDegraded(t *testing.T) {
+	clearRuntimeConfigEnv(t)
 	t.Setenv("POSTGRES_DSN", "")
 	t.Setenv("MINIO_ENDPOINT", "")
 	t.Setenv("MINIO_ACCESS_KEY", "")

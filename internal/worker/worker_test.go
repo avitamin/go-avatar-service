@@ -84,7 +84,19 @@ func TestDeleteHandlerIdempotentPhysicalDelete(t *testing.T) {
 	if err := h.Handle(ctx, DeleteEvent{AvatarID: created.ID}); err != nil {
 		t.Fatalf("Handle() error = %v", err)
 	}
-	if storage.Exists(ctx, a.OriginalKey) || storage.Exists(ctx, a.Thumb100Key) || storage.Exists(ctx, a.Thumb300Key) {
+	originalExists, err := storage.Exists(ctx, a.OriginalKey)
+	if err != nil {
+		t.Fatalf("original Exists() error = %v", err)
+	}
+	thumb100Exists, err := storage.Exists(ctx, a.Thumb100Key)
+	if err != nil {
+		t.Fatalf("thumb100 Exists() error = %v", err)
+	}
+	thumb300Exists, err := storage.Exists(ctx, a.Thumb300Key)
+	if err != nil {
+		t.Fatalf("thumb300 Exists() error = %v", err)
+	}
+	if originalExists || thumb100Exists || thumb300Exists {
 		t.Fatal("objects must be physically deleted by worker")
 	}
 	if err := h.Handle(ctx, DeleteEvent{AvatarID: created.ID}); err != nil {
@@ -128,7 +140,11 @@ func TestRunnerDispatchesUploadDeleteAndAcks(t *testing.T) {
 	if acked != 2 {
 		t.Fatalf("acked = %d, want 2", acked)
 	}
-	if storage.Exists(context.Background(), a.OriginalKey) {
+	originalExists, err := storage.Exists(context.Background(), a.OriginalKey)
+	if err != nil {
+		t.Fatalf("Exists() error = %v", err)
+	}
+	if originalExists {
 		t.Fatal("delete event must physically remove original")
 	}
 }

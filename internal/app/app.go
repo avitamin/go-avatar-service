@@ -101,6 +101,10 @@ func RunServer(ctx context.Context) error {
 	defer func() { _ = shutdownLogging(context.Background()) }()
 	metrics := observability.NewMetrics(nil)
 	logger := observability.NewLogger(obsCfg.ServiceName, "server", os.Stdout)
+	rateLimitCfg, err := rateLimitConfigFromEnv()
+	if err != nil {
+		return err
+	}
 	storeRuntime, err := newStoreFromEnv(ctx, metrics)
 	if err != nil {
 		return err
@@ -112,7 +116,12 @@ func RunServer(ctx context.Context) error {
 	}
 	defer brokerRuntime.close()
 	svc := service.NewAvatarService(storeRuntime.repo, storeRuntime.storage, brokerRuntime.broker, service.WithObservability(metrics))
-	server := newHTTPServer(addr, httpapi.NewRouter(svc, newServerHealthService(logger, storeRuntime, brokerRuntime), httpapi.WithObservability(observability.RouterOptions{Logger: logger, Metrics: metrics})))
+	server := newHTTPServer(addr, httpapi.NewRouter(
+		svc,
+		newServerHealthService(logger, storeRuntime, brokerRuntime),
+		httpapi.WithObservability(observability.RouterOptions{Logger: logger, Metrics: metrics}),
+		httpapi.WithRateLimiter(rateLimitCfg),
+	))
 	shutdownErrCh := make(chan error, 1)
 	go func() {
 		<-ctx.Done()
@@ -151,6 +160,9 @@ func RunWorker(ctx context.Context, out io.Writer) error {
 	defer func() { _ = shutdownLogging(context.Background()) }()
 	metrics := observability.NewMetrics(nil)
 	logger := observability.NewLogger(obsCfg.ServiceName, "worker", os.Stdout)
+	if _, err := circuitBreakerConfigFromEnv(); err != nil {
+		return err
+	}
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
 		rabbitURL = "amqp://guest:guest@localhost:5672/"
@@ -231,6 +243,10 @@ func newBrokerFromEnv(metricsOpt ...*observability.Metrics) (brokerRuntime, erro
 	if len(metricsOpt) > 0 {
 		metrics = metricsOpt[0]
 	}
+	circuitBreakerCfg, err := circuitBreakerConfigFromEnv()
+	if err != nil {
+		return brokerRuntime{}, err
+	}
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
 		return brokerRuntime{
@@ -244,7 +260,7 @@ func newBrokerFromEnv(metricsOpt ...*observability.Metrics) (brokerRuntime, erro
 		return brokerRuntime{}, err
 	}
 	return brokerRuntime{
-		broker:   client,
+		broker:   service.NewGuardedBroker(client, service.NewCircuitBreaker(circuitBreakerCfg)),
 		close:    func() { _ = client.Close() },
 		rabbitmq: service.HealthyComponent(client.HealthCheck),
 	}, nil
@@ -254,6 +270,10 @@ func newStoreFromEnv(ctx context.Context, metricsOpt ...*observability.Metrics) 
 	var metrics *observability.Metrics
 	if len(metricsOpt) > 0 {
 		metrics = metricsOpt[0]
+	}
+	circuitBreakerCfg, err := circuitBreakerConfigFromEnv()
+	if err != nil {
+		return storeRuntime{}, err
 	}
 	dsn := os.Getenv("POSTGRES_DSN")
 	minioCfg, hasMinio, err := minioConfigFromEnv()
@@ -282,12 +302,127 @@ func newStoreFromEnv(ctx context.Context, metricsOpt ...*observability.Metrics) 
 		return storeRuntime{}, err
 	}
 	return storeRuntime{
-		repo:     repo,
-		storage:  storage,
+		repo:     service.NewGuardedRepository(repo, service.NewCircuitBreaker(circuitBreakerCfg)),
+		storage:  service.NewGuardedStorage(storage, service.NewCircuitBreaker(circuitBreakerCfg)),
 		close:    func() { _ = repo.Close() },
 		postgres: service.HealthyComponent(repo.HealthCheck),
 		minio:    service.HealthyComponent(storage.HealthCheck),
 	}, nil
+}
+
+func rateLimitConfigFromEnv() (httpapi.RateLimitConfig, error) {
+	enabled, err := parseBoolEnvDefault("RATE_LIMIT_ENABLED", true)
+	if err != nil {
+		return httpapi.RateLimitConfig{}, err
+	}
+	requestsPerSec, err := parseFloatEnvDefault("RATE_LIMIT_REQUESTS_PER_SECOND", 20)
+	if err != nil {
+		return httpapi.RateLimitConfig{}, err
+	}
+	burst, err := parseIntEnvDefault("RATE_LIMIT_BURST", 40)
+	if err != nil {
+		return httpapi.RateLimitConfig{}, err
+	}
+	trustForwardedHeaders, err := parseBoolEnvDefault("RATE_LIMIT_TRUST_FORWARDED_HEADERS", false)
+	if err != nil {
+		return httpapi.RateLimitConfig{}, err
+	}
+	return httpapi.RateLimitConfig{
+		Enabled:               enabled,
+		RequestsPerSec:        requestsPerSec,
+		Burst:                 burst,
+		TrustForwardedHeaders: trustForwardedHeaders,
+	}, nil
+}
+
+func newDependencyCircuitBreaker() (*service.CircuitBreaker, error) {
+	cfg, err := circuitBreakerConfigFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	return service.NewCircuitBreaker(cfg), nil
+}
+
+func circuitBreakerConfigFromEnv() (service.CircuitBreakerConfig, error) {
+	enabled, err := parseBoolEnvDefault("CIRCUIT_BREAKER_ENABLED", true)
+	if err != nil {
+		return service.CircuitBreakerConfig{}, err
+	}
+	failureThreshold, err := parseIntEnvDefault("CIRCUIT_BREAKER_FAILURE_THRESHOLD", 5)
+	if err != nil {
+		return service.CircuitBreakerConfig{}, err
+	}
+	openTimeoutSeconds, err := parseIntEnvDefault("CIRCUIT_BREAKER_OPEN_TIMEOUT_SECONDS", 30)
+	if err != nil {
+		return service.CircuitBreakerConfig{}, err
+	}
+	return service.CircuitBreakerConfig{
+		Enabled:          enabled,
+		FailureThreshold: failureThreshold,
+		OpenTimeout:      time.Duration(openTimeoutSeconds) * time.Second,
+		IsFailure:        isDependencyFailure,
+	}, nil
+}
+
+func isDependencyFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	return !errors.Is(err, service.ErrNotFound) &&
+		!errors.Is(err, service.ErrForbidden) &&
+		!errors.Is(err, service.ErrVariantNotReady) &&
+		!errors.Is(err, service.ErrObjectNotFound)
+}
+
+func parseBoolEnvDefault(key string, fallback bool) (bool, error) {
+	raw, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback, nil
+	}
+	if raw == "" {
+		return false, fmt.Errorf("invalid %s: value must not be empty", key)
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	return value, nil
+}
+
+func parseFloatEnvDefault(key string, fallback float64) (float64, error) {
+	raw, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback, nil
+	}
+	if raw == "" {
+		return 0, fmt.Errorf("invalid %s: value must not be empty", key)
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	if value <= 0 {
+		return 0, fmt.Errorf("invalid %s: value must be greater than 0", key)
+	}
+	return value, nil
+}
+
+func parseIntEnvDefault(key string, fallback int) (int, error) {
+	raw, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback, nil
+	}
+	if raw == "" {
+		return 0, fmt.Errorf("invalid %s: value must not be empty", key)
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	if value <= 0 {
+		return 0, fmt.Errorf("invalid %s: value must be greater than 0", key)
+	}
+	return value, nil
 }
 
 func minioConfigFromEnv() (miniostore.Config, bool, error) {
@@ -338,9 +473,7 @@ func maybeStartMetricsServer(ctx context.Context, addr string, metrics *observab
 	if addr == "" {
 		return nil, func() {}
 	}
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", metrics.Handler())
-	server := &http.Server{Addr: addr, Handler: mux}
+	server := &http.Server{Addr: addr, Handler: workerMonitoringHandler(metrics)}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
@@ -357,4 +490,14 @@ func maybeStartMetricsServer(ctx context.Context, addr string, metrics *observab
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
 	}
+}
+
+func workerMonitoringHandler(metrics *observability.Metrics) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	mux.Handle("GET /metrics", metrics.Handler())
+	return mux
 }

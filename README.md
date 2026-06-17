@@ -17,6 +17,8 @@
 - [Навигация по планам](docs/plans/README.md)
 - [План перехода миграций на golang-migrate](docs/plans/02-migrations-golang-migrate-plan.md)
 - [Developer workflow](docs/development-workflow.md)
+- [Kubernetes deployment](docs/architecture/kubernetes.md)
+- [OpenAPI v1](docs/openapi/avatar-service-v1.yaml)
 - [AI-agent и contributor guidance](AGENTS.md)
 
 ## Текущее состояние
@@ -50,6 +52,13 @@ Observability включен в runtime:
 - HTTP metrics используют route templates, например `/api/v1/avatars/{avatar_id}`, без raw `avatar_id`/`user_id` в labels.
 - OpenTelemetry traces создаются локально всегда при `OTEL_TRACES_ENABLED=true`; если `OTEL_EXPORTER_OTLP_ENDPOINT` пустой, используется noop/exporter-free provider.
 - RabbitMQ publish/consume переносит W3C trace context через AMQP headers, поэтому worker logs можно связать с исходным HTTP request по `trace_id`.
+
+Production readiness guardrails:
+
+- HTTP router включает per-client rate limiting по умолчанию. Настройки: `RATE_LIMIT_ENABLED`, `RATE_LIMIT_REQUESTS_PER_SECOND`, `RATE_LIMIT_BURST`.
+  Per-client buckets очищаются лениво по внутреннему TTL, без новых public env/Helm settings; подробный компромисс зафиксирован в [v1 spec](docs/specs/01-avatar-service-v1.md).
+- Runtime adapters защищены circuit breaker guard. Настройки: `CIRCUIT_BREAKER_ENABLED`, `CIRCUIT_BREAKER_FAILURE_THRESHOLD`, `CIRCUIT_BREAKER_OPEN_TIMEOUT_SECONDS`.
+- При открытом circuit breaker HTTP handlers возвращают единый JSON error shape с `503 dependency_unavailable`.
 
 ## CLI
 
@@ -171,6 +180,28 @@ curl -fsS -H 'X-Request-ID: manual-check' http://localhost:18080/health
 Observability Compose stack провиженит Grafana datasources `Prometheus`, `Jaeger`, `Loki` и dashboards `Avatar Service Overview`, `Avatar Business KPIs`, `Avatar Infrastructure`.
 
 Полный developer workflow, `.env` overrides, shared JetBrains run configurations и скрипт подбора свободных портов вынесены в [docs/development-workflow.md](docs/development-workflow.md).
+
+## Kubernetes
+
+Helm chart находится в `deploy/helm/avatar-service`. Локальный профиль поднимает `server`, `worker`, migration Job, PostgreSQL, RabbitMQ, MinIO, Service, Ingress, HPA, NetworkPolicy, RBAC и optional ServiceMonitor.
+
+```bash
+docker build -t avatar-service:latest .
+helm upgrade --install avatar-service ./deploy/helm/avatar-service \
+  --namespace avatar-service \
+  --create-namespace \
+  -f ./deploy/helm/avatar-service/values-local.yaml
+kubectl -n avatar-service port-forward svc/avatar-service-server 18080:80
+curl -fsS http://localhost:18080/health
+```
+
+Для `kind` перед установкой загрузите image:
+
+```bash
+kind load docker-image avatar-service:latest
+```
+
+Подробности по архитектуре, ServiceMonitor, PrometheusRule, Grafana dashboard, alerting и security defaults описаны в [Kubernetes deployment](docs/architecture/kubernetes.md).
 
 ## Проектная структура
 

@@ -154,14 +154,20 @@ func (s *Storage) Delete(ctx context.Context, key string) error {
 }
 
 // Exists reports whether key is present in the configured bucket.
-func (s *Storage) Exists(ctx context.Context, key string) bool {
-	ctx, _, done := s.start(ctx, "Exists", key)
+func (s *Storage) Exists(ctx context.Context, key string) (bool, error) {
+	ctx, span, done := s.start(ctx, "Exists", key)
 	defer done(nil)
 	_, err := s.client.StatObject(ctx, s.bucket, key, minio.StatObjectOptions{})
-	if err != nil {
-		done(err)
+	err = mapError(err)
+	if errors.Is(err, service.ErrObjectNotFound) {
+		return false, nil
 	}
-	return err == nil
+	if err != nil {
+		recordMinioError(span, err)
+		done(err)
+		return false, err
+	}
+	return true, nil
 }
 
 func mapError(err error) error {

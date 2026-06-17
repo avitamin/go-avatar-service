@@ -1,0 +1,106 @@
+{{- if .Values.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "avatar-service.fullname" . }}-grafana-dashboard
+  labels:
+    {{- include "avatar-service.labels" . | nindent 4 }}
+    {{- with .Values.grafanaDashboard.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  avatar-service-kubernetes.json: |-
+    {
+      "uid": "avatar-service-kubernetes",
+      "title": "Avatar Service Kubernetes",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "tags": ["avatar-service", "kubernetes"],
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "type": "stat",
+          "title": "Server available replicas",
+          "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+          "targets": [
+            {
+              "expr": "kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=\"{{ include "avatar-service.fullname" . }}-server\"}",
+              "legendFormat": "server"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Worker available replicas",
+          "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+          "targets": [
+            {
+              "expr": "kube_deployment_status_replicas_available{namespace=\"$namespace\",deployment=\"{{ include "avatar-service.fullname" . }}-worker\"}",
+              "legendFormat": "worker"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "HTTP request rate",
+          "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "sum by (status) (rate(http_requests_total[5m]))",
+              "legendFormat": "{{ "{{ status }}" }}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "HTTP p95 latency",
+          "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket[5m])))",
+              "legendFormat": "{{ "{{ route }}" }}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Dependency errors",
+          "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "sum by (component) (rate(avatar_dependency_operations_total{status=\"error\"}[5m]))",
+              "legendFormat": "{{ "{{ component }}" }}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Worker failures",
+          "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+          "targets": [
+            {
+              "expr": "sum by (routing_key) (rate(avatar_worker_messages_total{status=\"error\"}[5m]))",
+              "legendFormat": "{{ "{{ routing_key }}" }}"
+            }
+          ]
+        }
+      ],
+      "templating": {
+        "list": [
+          {
+            "name": "namespace",
+            "type": "constant",
+            "query": "{{ .Release.Namespace }}",
+            "current": {
+              "text": "{{ .Release.Namespace }}",
+              "value": "{{ .Release.Namespace }}"
+            }
+          }
+        ]
+      }
+    }
+{{- end }}

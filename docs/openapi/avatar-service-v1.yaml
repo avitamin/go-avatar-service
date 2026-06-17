@@ -1,0 +1,254 @@
+openapi: 3.0.3
+info:
+  title: Avatar Service API
+  version: "1.0.0"
+  description: HTTP API v1 for uploading, reading and deleting user avatars.
+servers:
+  - url: http://localhost:18080
+paths:
+  /health:
+    get:
+      summary: Runtime health snapshot
+      responses:
+        "200":
+          description: Health status. Degraded dependencies still return 200.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      responses:
+        "200":
+          description: Prometheus text exposition.
+  /api/v1/avatars:
+    post:
+      summary: Upload avatar original image
+      parameters:
+        - $ref: "#/components/parameters/UserIDHeader"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Avatar metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Avatar"
+        "400":
+          $ref: "#/components/responses/Error"
+        "413":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /api/v1/avatars/{avatar_id}:
+    get:
+      summary: Read avatar bytes
+      parameters:
+        - $ref: "#/components/parameters/AvatarID"
+        - $ref: "#/components/parameters/Size"
+        - name: format
+          in: query
+          schema:
+            type: string
+          description: Unsupported in v1; returns 400 when present.
+      responses:
+        "200":
+          description: Avatar image bytes.
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+    delete:
+      summary: Soft delete avatar by id
+      parameters:
+        - $ref: "#/components/parameters/AvatarID"
+        - $ref: "#/components/parameters/UserIDHeader"
+      responses:
+        "204":
+          description: Deleted.
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /api/v1/avatars/{avatar_id}/metadata:
+    get:
+      summary: Read avatar metadata
+      parameters:
+        - $ref: "#/components/parameters/AvatarID"
+      responses:
+        "200":
+          description: Avatar metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Avatar"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /api/v1/users/{user_id}/avatars:
+    get:
+      summary: List active avatars for user
+      parameters:
+        - $ref: "#/components/parameters/UserIDPath"
+      responses:
+        "200":
+          description: Avatar list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Avatar"
+        "400":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /api/v1/users/{user_id}/avatar:
+    get:
+      summary: Read current user avatar bytes
+      parameters:
+        - $ref: "#/components/parameters/UserIDPath"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200":
+          description: Avatar image bytes.
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+    delete:
+      summary: Soft delete current user avatar
+      parameters:
+        - $ref: "#/components/parameters/UserIDPath"
+        - $ref: "#/components/parameters/UserIDHeader"
+      responses:
+        "204":
+          description: Deleted.
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+components:
+  parameters:
+    UserIDHeader:
+      name: X-User-ID
+      in: header
+      required: true
+      schema:
+        type: string
+    AvatarID:
+      name: avatar_id
+      in: path
+      required: true
+      schema:
+        type: string
+    UserIDPath:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+    Size:
+      name: size
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [original, 100x100, 300x300]
+        default: original
+  responses:
+    Error:
+      description: JSON error response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Avatar:
+      type: object
+      required: [id, user_id, url, status, created_at]
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        url:
+          type: string
+        status:
+          type: string
+          enum: [processing, completed, failed]
+        created_at:
+          type: string
+          format: date-time
+        thumbnails:
+          type: array
+          items:
+            type: string
+            enum: [100x100, 300x300]
+    Health:
+      type: object
+      required: [status, components]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        components:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [ok, degraded]
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true

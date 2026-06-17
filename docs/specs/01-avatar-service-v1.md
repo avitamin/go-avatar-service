@@ -181,7 +181,7 @@
 * Отсутствие outbox означает риск рассинхронизации между БД и брокером; он частично принят требованиями MVP.
 * Выбор API-backed web gallery упрощает консистентность, но может привести к лишнему внутреннему HTTP-вызову, если реализовать буквально через loopback. Это нужно избежать и использовать общий service layer.
 * Хранение availability flags в БД увеличит схему, но уменьшит сложность runtime-логики.
-* Публичные read endpoints повышают риск abuse; для MVP это допустимо, но rate limiting и CDN остаются вне scope.
+* Публичные read endpoints повышают риск abuse. Базовый per-client rate limiting включен в runtime, но CDN и advanced abuse protection остаются вне scope MVP.
 
 ---
 
@@ -946,7 +946,8 @@ make lint
 2. **Публичные read endpoints**
 
     * Возможны скачивания/abuse.
-    * В MVP нет rate limiting.
+    * Runtime использует базовый per-client rate limiting с ленивой TTL-очисткой buckets: это ограничивает lifetime неактивных clients без фонового goroutine и новых public env/Helm settings.
+    * Компромисс: bucket map может временно расти между cleanup-запусками, cleanup срабатывает только на входящем request и один request платит стоимость сканирования buckets под mutex. Это не hard cap против большого числа уникальных clients за короткий TTL-window.
 
 3. **Worker idempotency базового уровня**
 
@@ -1064,7 +1065,7 @@ make lint
 
 * Auth platform
 * pagination
-* rate limiting
+* hard cap/LRU/distributed rate limiting
 * CDN
 * K8s
 * outbox

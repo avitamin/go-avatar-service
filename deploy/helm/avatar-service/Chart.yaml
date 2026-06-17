@@ -1,0 +1,6 @@
+apiVersion: v2
+name: avatar-service
+description: Self-contained Helm chart for go-avatar-service local Kubernetes deployments.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

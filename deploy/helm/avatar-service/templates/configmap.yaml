@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "avatar-service.fullname" . }}-config
+  labels:
+    {{- include "avatar-service.labels" . | nindent 4 }}
+data:
+  HTTP_ADDR: {{ .Values.config.httpAddr | quote }}
+  MINIO_ENDPOINT: "{{ include "avatar-service.fullname" . }}-minio:9000"
+  MINIO_BUCKET: {{ .Values.config.minioBucket | quote }}
+  MINIO_USE_SSL: {{ .Values.config.minioUseSSL | quote }}
+  SERVICE_VERSION: {{ .Values.config.serviceVersion | quote }}
+  OTEL_TRACES_ENABLED: {{ .Values.config.otelTracesEnabled | quote }}
+  OTEL_LOGS_ENABLED: {{ .Values.config.otelLogsEnabled | quote }}
+  RATE_LIMIT_ENABLED: {{ .Values.config.rateLimitEnabled | quote }}
+  RATE_LIMIT_REQUESTS_PER_SECOND: {{ .Values.config.rateLimitRequestsPerSecond | quote }}
+  RATE_LIMIT_BURST: {{ .Values.config.rateLimitBurst | quote }}
+  RATE_LIMIT_TRUST_FORWARDED_HEADERS: {{ .Values.config.rateLimitTrustForwardedHeaders | quote }}
+  CIRCUIT_BREAKER_ENABLED: {{ .Values.config.circuitBreakerEnabled | quote }}
+  CIRCUIT_BREAKER_FAILURE_THRESHOLD: {{ .Values.config.circuitBreakerFailureThreshold | quote }}
+  CIRCUIT_BREAKER_OPEN_TIMEOUT_SECONDS: {{ .Values.config.circuitBreakerOpenTimeoutSeconds | quote }}
